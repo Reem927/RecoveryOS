@@ -1,533 +1,775 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
+  Activity,
   ArrowRight,
-  CheckCircle2,
-  ClipboardCheck,
-  Info,
-  ScanLine,
-  Search,
+  Flame,
+  HeartPulse,
+  Play,
+  Settings2,
   Sparkles,
-  UserPlus,
-  UserRound,
-  Users,
+  Target,
+  Timer,
+  Waves,
+  X,
   Zap,
 } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
+import { AssessmentStepper, type Step } from "@/components/hydrawav3/assessment-stepper"
 import { useActiveSession } from "@/lib/active-session"
+import {
+  buildProtocol,
+  buildProtocolReasoning,
+  getProtocolName,
+  type HydrawavPayload,
+  type SessionMetrics,
+} from "@/lib/hydrawav3-protocol"
+import { getClient } from "@/lib/hydrawav3-client"
+import { DEMO_SESSION_METRICS, getDemoAssessment } from "@/lib/hydrawav3-demo-data"
+import {
+  computeWorseSide,
+  type AssessmentSession,
+  type ExercisePerformance,
+  type MuscleScore,
+} from "@/lib/leg-assessment-engine"
 
-type ClientType = "existing" | "new" | "guest"
+const DEFAULT_METRICS: SessionMetrics = {
+  movementQuality: 70,
+  symmetry: 75,
+  cardio: 74,
+  breathing: 12,
+}
 
-type ApiClient = {
-  id: string
-  full_name: string
-  email: string | null
-  focus_region: string | null
-  intake: { notes?: string } | null
-  created_at: string
+function deriveMetricsFromPerformances(
+  performances: ExercisePerformance[],
+): SessionMetrics {
+  if (performances.length === 0) return DEFAULT_METRICS
+  const mq =
+    performances.reduce((s, p) => s + p.movementQuality, 0) / performances.length
+  const sym =
+    performances.reduce((s, p) => s + p.symmetry, 0) / performances.length
+  return {
+    movementQuality: Math.round(mq),
+    symmetry: Math.round(sym),
+    cardio: DEFAULT_METRICS.cardio,
+    breathing: DEFAULT_METRICS.breathing,
+  }
+}
+
+function deriveRecoveryScore(scores: MuscleScore[]): number {
+  if (scores.length === 0) return 81
+  const top4 = scores.slice(0, 4)
+  const avg =
+    top4.reduce((s, m) => s + Math.max(0, 100 - m.dysfunctionScore), 0) /
+    top4.length
+  return Math.round(avg)
 }
 
 export default function SessionSetupPage() {
   const router = useRouter()
   const { startSession } = useActiveSession()
 
-  const [clientType, setClientType] = useState<ClientType>("existing")
-  const [query, setQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string>("")
-  const [newName, setNewName] = useState("")
-  const [newAge, setNewAge] = useState("")
-  const [newFocus, setNewFocus] = useState("")
-  const [clients, setClients] = useState<ApiClient[]>([])
-  const [loadingClients, setLoadingClients] = useState(true)
+  const [muscleScores, setMuscleScores] = useState<MuscleScore[]>([])
+  const [performances, setPerformances] = useState<ExercisePerformance[]>([])
+  const [metrics, setMetrics] = useState<SessionMetrics>(DEFAULT_METRICS)
+  const [ready, setReady] = useState(false)
+  const [adjustOpen, setAdjustOpen] = useState(false)
+  const [hotOverride, setHotOverride] = useState<number | null>(null)
+  const [vibOverride, setVibOverride] = useState<number | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/clients")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setClients(data)
-          if (data.length > 0) setSelectedId(data[0].id)
+    try {
+      const rawScores = localStorage.getItem("hw3_muscle_scores")
+      const rawSession = localStorage.getItem("hw3_session")
+
+      let loadedScores: MuscleScore[] | null = null
+      let loadedPerformances: ExercisePerformance[] | null = null
+
+      if (rawScores) {
+        const parsed = JSON.parse(rawScores) as MuscleScore[]
+        if (Array.isArray(parsed) && parsed.length > 0) loadedScores = parsed
+      }
+      if (rawSession) {
+        const parsed = JSON.parse(rawSession) as AssessmentSession
+        if (parsed?.performances && parsed.performances.length > 0) {
+          loadedPerformances = parsed.performances
         }
-      })
-      .finally(() => setLoadingClients(false))
+      }
+
+      // Fallback to demo data so the flow always presents a complete story.
+      if (!loadedScores || !loadedPerformances) {
+        const demo = getDemoAssessment()
+        loadedScores = loadedScores ?? demo.muscleScores
+        loadedPerformances = loadedPerformances ?? demo.performances
+        setMetrics(DEMO_SESSION_METRICS)
+      } else {
+        setMetrics(deriveMetricsFromPerformances(loadedPerformances))
+      }
+
+      setMuscleScores(loadedScores)
+      setPerformances(loadedPerformances)
+    } catch {
+      const demo = getDemoAssessment()
+      setMuscleScores(demo.muscleScores)
+      setPerformances(demo.performances)
+      setMetrics(DEMO_SESSION_METRICS)
+    } finally {
+      setReady(true)
+    }
   }, [])
 
-  const filteredClients = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return clients
-    return clients.filter(
-      (c) =>
-        c.full_name.toLowerCase().includes(q) ||
-        (c.focus_region ?? "").toLowerCase().includes(q),
-    )
-  }, [query, clients])
+  const worseSide = useMemo(
+    () => computeWorseSide(performances),
+    [performances],
+  )
 
-  const selectedClient = clients.find((c) => c.id === selectedId) ?? clients[0]
+  const basePayload = useMemo(
+    () => buildProtocol(muscleScores, performances, metrics),
+    [muscleScores, performances, metrics],
+  )
 
-  const canContinue =
-    clientType === "guest" ||
-    (clientType === "existing" && Boolean(selectedClient)) ||
-    (clientType === "new" && newName.trim().length > 0)
-
-  const getPatientForSession = () => {
-    if (clientType === "existing") {
-      return {
-        patientId: selectedClient?.id ?? "",
-        patientName: selectedClient?.full_name ?? "Client",
-      }
-    }
-    if (clientType === "new") {
-      return {
-        patientId: `new-${Date.now()}`,
-        patientName: newName.trim() || "New client",
-      }
-    }
+  const payload: HydrawavPayload = useMemo(() => {
+    if (hotOverride === null && vibOverride === null) return basePayload
+    const hot = hotOverride ?? basePayload.pwmValues.hot[0]
     return {
-      patientId: "guest",
-      patientName: "Guest session",
+      ...basePayload,
+      pwmValues: {
+        hot: basePayload.pwmValues.hot.map(() => hot),
+        cold: basePayload.pwmValues.cold,
+      },
+      vibMax: vibOverride ?? basePayload.vibMax,
     }
-  }
+  }, [basePayload, hotOverride, vibOverride])
 
-  const handleQuickStart = () => {
-    if (!canContinue) return
+  const protocolName = getProtocolName(payload)
+  const reasoning = useMemo(
+    () => buildProtocolReasoning(muscleScores, worseSide, payload),
+    [muscleScores, worseSide, payload],
+  )
+  const recoveryScore = useMemo(
+    () => deriveRecoveryScore(muscleScores),
+    [muscleScores],
+  )
 
-    const patient = getPatientForSession()
+  const intensityLabel =
+    protocolName === "H3-Alpha"
+      ? "Gentle"
+      : protocolName === "H3-Beta"
+        ? "Moderate"
+        : "Performance"
+  const sunSide =
+    worseSide === "symmetric"
+      ? "left"
+      : (worseSide as "left" | "right")
+  const moonSide = sunSide === "left" ? "right" : "left"
+  const durationMin = Math.max(1, Math.round(payload.totalDuration / 60))
 
-    startSession({
-      patientId: patient.patientId,
-      patientName: patient.patientName,
-      protocol: "H3-Beta · 18 min",
-      room: "Room 2",
-    })
+  const steps: Step[] = [
+    { label: "Consent", status: "done" },
+    { label: "Intake", status: "done" },
+    { label: "Camera scan", status: "done" },
+    { label: "Insights", status: "done" },
+    { label: "Session", status: "active", meta: "Review protocol" },
+  ]
 
-    router.push("/session")
+  const handleStart = async () => {
+    if (starting) return
+    setStarting(true)
+    setStartError(null)
+    try {
+      localStorage.setItem("hw3_active_payload", JSON.stringify(payload))
+      const client = getClient()
+      const result = await client.startSession(payload)
+      if (!result.success) {
+        setStartError(result.message)
+        setStarting(false)
+        return
+      }
+      startSession({
+        patientId: "alex-morgan",
+        patientName: "Alex Morgan",
+        protocol: `${protocolName} · ${durationMin} min`,
+        room: "Room 2",
+      })
+      router.push("/session")
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : "Failed to start session")
+      setStarting(false)
+    }
   }
 
   return (
     <AppShell
-      title="Session setup"
-      eyebrow="Step 1 of 2 · Prepare session"
+      title="Session setup · Alex Morgan"
+      eyebrow="Step 5 · Review and start"
+      breadcrumbs={[
+        { label: "Patients", href: "/patients" },
+        { label: "Alex Morgan" },
+        { label: "Session setup" },
+      ]}
       actions={
         <Link
-          href="/dashboard"
+          href="/insights"
           className="inline-flex h-10 items-center rounded-[10px] border border-black/[0.07] bg-white px-3 text-[12.5px] font-medium text-[#374151] hover:border-black/10"
         >
-          Cancel
+          Back to insights
         </Link>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
-        <div className="space-y-6">
-          <section className="rounded-[12px] border border-black/[0.07] bg-white">
-            <header className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
-              <div className="flex items-center gap-3">
-                <StepDot number={1} />
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                    Select client type
-                  </p>
-                  <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight text-[#1F2937]">
-                    Who are we working with today?
-                  </h2>
-                </div>
-              </div>
-            </header>
+      <div className="space-y-6">
+        <AssessmentStepper steps={steps} />
 
-            <div className="p-5">
-              <div className="grid grid-cols-3 gap-2 rounded-[10px] border border-black/[0.06] bg-[#F5F0EA] p-1">
-                <ClientTypeButton
-                  active={clientType === "existing"}
-                  onClick={() => setClientType("existing")}
-                  label="Existing client"
-                  icon={<Users className="h-4 w-4" />}
-                />
-
-                <ClientTypeButton
-                  active={clientType === "new"}
-                  onClick={() => setClientType("new")}
-                  label="New client"
-                  icon={<UserPlus className="h-4 w-4" />}
-                />
-
-                <ClientTypeButton
-                  active={clientType === "guest"}
-                  onClick={() => setClientType("guest")}
-                  label="Guest session"
-                  icon={<UserRound className="h-4 w-4" />}
-                />
-              </div>
-
-              {clientType === "existing" && (
-                <div className="mt-5 space-y-4">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-                    <input
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search clients by name or tag..."
-                      className="h-11 w-full rounded-[10px] border border-black/[0.07] bg-white pl-9 pr-3 text-[14px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/15"
-                    />
-                  </div>
-
-                  <ul className="max-h-[360px] divide-y divide-black/[0.05] overflow-y-auto rounded-[10px] border border-black/[0.06]">
-                    {loadingClients && (
-                      <li className="px-4 py-6 text-center text-sm text-[#9CA3AF]">Loading clients…</li>
-                    )}
-                    {!loadingClients && filteredClients.length === 0 && (
-                      <li className="px-4 py-6 text-center text-sm text-[#9CA3AF]">
-                        {clients.length === 0 ? "No clients yet. Add one from the Clients page." : "No clients match your search."}
-                      </li>
-                    )}
-                    {filteredClients.map((client) => {
-                      const active = selectedId === client.id
-                      const initials = client.full_name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
-
-                      return (
-                        <li key={client.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedId(client.id)}
-                            className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
-                              active ? "bg-[#C97A56]/10" : "hover:bg-[#F2EDE6]/60"
-                            }`}
-                          >
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C97A56]/70 to-[#162532]/70 text-[12px] font-semibold text-white ring-2 ring-white">
-                              {initials}
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13.5px] font-semibold text-[#1F2937]">
-                                {client.full_name}
-                              </div>
-                              <div className="mt-0.5 text-[11px] text-[#6B7280] capitalize truncate">
-                                {client.focus_region ?? client.email ?? "No focus area"}
-                              </div>
-                            </div>
-
-                            <div
-                              className={`flex h-5 w-5 items-center justify-center rounded-full border ${
-                                active
-                                  ? "border-[#C97A56] bg-[#C97A56] text-white"
-                                  : "border-black/[0.12] bg-white text-transparent"
-                              }`}
-                            >
-                              <CheckCircle2 className="h-3 w-3" />
-                            </div>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </div>
-              )}
-
-              {clientType === "new" && (
-                <div className="mt-5 space-y-4 rounded-[10px] border border-dashed border-black/[0.1] bg-[#F5F0EA]/50 p-5">
-                  <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
-                    <Info className="h-3.5 w-3.5 text-[#C97A56]" />
-                    Minimal intake. You can complete the full chart after the
-                    session.
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                        Full name
-                      </span>
-                      <input
-                        value={newName}
-                        onChange={(event) => setNewName(event.target.value)}
-                        placeholder="e.g. Jordan Reyes"
-                        className="h-11 w-full rounded-[10px] border border-black/[0.07] bg-white px-3.5 text-[14px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/15"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                        Age
-                      </span>
-                      <input
-                        value={newAge}
-                        onChange={(event) => setNewAge(event.target.value)}
-                        inputMode="numeric"
-                        placeholder="34"
-                        className="h-11 w-full rounded-[10px] border border-black/[0.07] bg-white px-3.5 text-[14px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/15"
-                      />
-                    </label>
-                  </div>
-
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                      Notes / focus area
-                    </span>
-                    <textarea
-                      value={newFocus}
-                      onChange={(event) => setNewFocus(event.target.value)}
-                      rows={3}
-                      placeholder="e.g. Post-op shoulder, limited external rotation."
-                      className="w-full rounded-[10px] border border-black/[0.07] bg-white px-3.5 py-2.5 text-[13.5px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/15"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {clientType === "guest" && (
-                <div className="mt-5 flex items-start gap-3 rounded-[10px] border border-[#F0A500]/25 bg-[#F0A500]/10 p-4">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#F0A500]/20 text-[#c47f00]">
-                    <Info className="h-4 w-4" />
+        {/* Hero: protocol name + recovery score */}
+        <section className="relative overflow-hidden rounded-[12px] border border-black/[0.07] bg-gradient-to-br from-[#162532] via-[#1A2E3B] to-[#162532] p-6 text-white">
+          <div
+            aria-hidden
+            className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#C97A56]/20 blur-[100px]"
+          />
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-5">
+              <div className="relative flex h-[120px] w-[120px] shrink-0 items-center justify-center">
+                <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+                  <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="52"
+                    fill="none"
+                    stroke="url(#setupScoreGrad)"
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 52}
+                    strokeDashoffset={2 * Math.PI * 52 * (1 - recoveryScore / 100)}
+                  />
+                  <defs>
+                    <linearGradient id="setupScoreGrad" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#C97A56" />
+                      <stop offset="100%" stopColor="#F0A500" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                    Recovery
                   </span>
-
-                  <div>
-                    <div className="text-[13.5px] font-semibold text-[#1F2937]">
-                      Proceeding as guest
-                    </div>
-                    <div className="mt-0.5 text-[12.5px] text-[#6B7280]">
-                      No history will be saved. Results remain on this device
-                      for this session only.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[12px] border border-black/[0.07] bg-white">
-            <header className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
-              <div className="flex items-center gap-3">
-                <StepDot number={2} />
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                    Choose session type
-                  </p>
-                  <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight text-[#1F2937]">
-                    How would you like to start?
-                  </h2>
-                </div>
-              </div>
-            </header>
-
-            <div className="grid gap-4 p-5 md:grid-cols-2">
-              <Link
-                href={canContinue ? "/scan" : "#"}
-                aria-disabled={!canContinue}
-                className={`group relative overflow-hidden rounded-[14px] border bg-[#162532] p-5 text-white transition-transform ${
-                  canContinue
-                    ? "border-[#C97A56]/40 hover:-translate-y-0.5"
-                    : "pointer-events-none cursor-not-allowed border-white/5 opacity-60"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#C97A56]/20 text-[#C97A56] ring-1 ring-[#C97A56]/30">
-                    <ScanLine className="h-[18px] w-[18px]" />
-                  </span>
-
-                  <span className="rounded-full bg-[#C97A56] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
-                    Recommended
+                  <span className="mt-0.5 text-[32px] font-semibold tabular-nums leading-none">
+                    {recoveryScore}
                   </span>
                 </div>
-
-                <h3 className="mt-4 text-[18px] font-semibold tracking-tight">
-                  Guided Assessment
-                </h3>
-
-                <p className="mt-1 text-[13px] leading-relaxed text-white/65">
-                  Analyze movement with the camera and AI, then auto-generate a
-                  recommended session.
+              </div>
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/70">
+                  <Sparkles className="h-3 w-3 text-[#C97A56]" />
+                  Protocol generated from assessment
+                </span>
+                <h2 className="mt-3 text-[30px] font-semibold leading-tight tracking-tight">
+                  Hydrawav3 · <span className="text-[#F5B08C]">{protocolName}</span>
+                </h2>
+                <p className="mt-1 text-[13px] leading-relaxed text-white/60">
+                  {intensityLabel} intensity · {durationMin} min · {payload.sessionCount} cycle
+                  {payload.sessionCount === 1 ? "" : "s"}
                 </p>
+              </div>
+            </div>
 
-                <div className="mt-5 flex items-center justify-between text-[12px] text-white/55">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-[#C97A56]" />
-                    ~90 seconds
-                  </span>
-
-                  <span className="inline-flex items-center gap-1 font-semibold text-[#C97A56] transition-transform group-hover:translate-x-0.5">
-                    Start <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </Link>
-
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={handleQuickStart}
-                disabled={!canContinue}
-                className={`group relative overflow-hidden rounded-[14px] border bg-white p-5 text-left transition-transform ${
-                  canContinue
-                    ? "border-black/[0.08] hover:-translate-y-0.5 hover:border-[#C97A56]/40"
-                    : "cursor-not-allowed opacity-60"
-                }`}
+                onClick={() => setAdjustOpen(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-white/15 bg-white/[0.04] px-4 text-[13px] font-medium text-white/85 hover:bg-white/[0.08]"
               >
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#1F2937]/5 text-[#1F2937] ring-1 ring-black/[0.06]">
-                    <Zap className="h-[18px] w-[18px]" />
-                  </span>
-
-                  <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">
-                    Manual
-                  </span>
-                </div>
-
-                <h3 className="mt-4 text-[18px] font-semibold tracking-tight text-[#1F2937]">
-                  Quick Start Session
-                </h3>
-
-                <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
-                  Skip the scan and start the session immediately with the
-                  default protocol.
-                </p>
-
-                <div className="mt-5 flex items-center justify-between text-[12px] text-[#6B7280]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <ClipboardCheck className="h-3.5 w-3.5 text-[#C97A56]" />
-                    H3-Beta · 18 min
-                  </span>
-
-                  <span className="inline-flex items-center gap-1 font-semibold text-[#1F2937] transition-transform group-hover:translate-x-0.5">
-                    Start <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
+                <Settings2 className="h-4 w-4" />
+                Adjust protocol
+              </button>
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={starting || !ready}
+                className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 text-[13px] font-semibold text-white shadow-[0_8px_20px_-10px_rgba(201,122,86,0.7)] hover:bg-[#B86A48] disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" />
+                {starting ? "Starting…" : "Start session"}
+                {!starting && <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
+          </div>
+          {startError && (
+            <div className="relative mt-4 rounded-[10px] border border-[#E74C3C]/30 bg-[#E74C3C]/10 px-4 py-2 text-[12px] text-[#f5b8b0]">
+              {startError}
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          {/* Pad placement */}
+          <section className="rounded-[12px] border border-black/[0.07] bg-white p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
+                  Pad placement
+                </p>
+                <h3 className="mt-1 text-[16px] font-semibold tracking-tight text-[#1F2937]">
+                  Where to place the belt
+                </h3>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C97A56]/12 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#B86A48]">
+                <Target className="h-3 w-3" />
+                {worseSide === "symmetric" ? "Balanced" : `${sunSide} side focus`}
+              </span>
+            </div>
+
+            <div className="mt-5 flex items-center justify-center">
+              <BodyDiagram sunSide={sunSide} moonSide={moonSide} />
+            </div>
+
+            <ul className="mt-5 space-y-2.5">
+              <li className="flex items-center gap-3 rounded-[10px] bg-[#FFF3ED] px-3 py-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#C97A56] text-white">
+                  <Flame className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#B86A48]">
+                    Sun pad · {sunSide}
+                  </div>
+                  <div className="text-[13px] text-[#1F2937]">
+                    Warmth supports tissue preparation
+                  </div>
+                </div>
+              </li>
+              <li className="flex items-center gap-3 rounded-[10px] bg-[#EEF4FA] px-3 py-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#4F8FBF] text-white">
+                  <Waves className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2E6591]">
+                    Moon pad · {moonSide}
+                  </div>
+                  <div className="text-[13px] text-[#1F2937]">
+                    Cool tone supports nervous system calming
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          {/* Reasoning */}
+          <section className="rounded-[12px] border border-black/[0.07] bg-white p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
+              Why this protocol
+            </p>
+            <h3 className="mt-1 text-[16px] font-semibold tracking-tight text-[#1F2937]">
+              Built from the camera scan
+            </h3>
+            <ul className="mt-4 space-y-3">
+              {reasoning.map((r, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#C97A56]/12 text-[#C97A56]">
+                    <Sparkles className="h-3 w-3" />
+                  </span>
+                  <p className="text-[13px] leading-relaxed text-[#374151]">{r}</p>
+                </li>
+              ))}
+            </ul>
+
+            {muscleScores.length > 0 && (
+              <div className="mt-5 rounded-[10px] border border-dashed border-[#C97A56]/30 bg-[#C97A56]/6 p-3 text-[12px] leading-relaxed text-[#8c4e32]">
+                <span className="font-semibold text-[#C97A56]">Top focus muscles: </span>
+                {muscleScores
+                  .slice(0, 3)
+                  .map((m) => m.muscle.name)
+                  .join(" · ")}
+              </div>
+            )}
           </section>
         </div>
 
-        <aside className="space-y-6">
-          <section className="rounded-[12px] border border-black/[0.07] bg-white">
-            <div className="border-b border-black/[0.06] px-4 py-3">
+        {/* Parameter cards */}
+        <section className="rounded-[12px] border border-black/[0.07] bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                Selected client
+                Protocol parameters
               </p>
+              <h3 className="mt-1 text-[16px] font-semibold tracking-tight text-[#1F2937]">
+                What the device is set to
+              </h3>
             </div>
-
-            <div className="p-4">
-              {clientType === "existing" && (
-                <ClientPreview client={selectedClient} />
-              )}
-
-              {clientType === "new" && (
-                <div>
-                  <div className="text-[14.5px] font-semibold text-[#1F2937]">
-                    {newName.trim() || "New client"}
-                  </div>
-                  <div className="mt-1 text-[12.5px] text-[#6B7280]">
-                    {newAge ? `${newAge} years` : "Age not set"} · Intake in
-                    progress
-                  </div>
-                  <div className="mt-4 rounded-[10px] border border-dashed border-black/[0.1] bg-[#F5F0EA]/40 px-3 py-2.5 text-[12.5px] text-[#6B7280]">
-                    {newFocus.trim()
-                      ? newFocus
-                      : "No focus notes yet. You can add details as you go."}
-                  </div>
-                </div>
-              )}
-
-              {clientType === "guest" && (
-                <div>
-                  <div className="text-[14.5px] font-semibold text-[#1F2937]">
-                    Guest session
-                  </div>
-                  <div className="mt-1 text-[12.5px] text-[#6B7280]">
-                    Results can be reviewed at the end of the session.
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[12px] border border-[#C97A56]/25 bg-gradient-to-b from-[#C97A56]/10 to-transparent p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#B86A48]">
-              Fast path
-            </div>
-            <h3 className="mt-1 text-[15px] font-semibold text-[#1F2937]">
-              Start from the sidebar too
-            </h3>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-[#6B7280]">
-              The sidebar &ldquo;Start Live Session&rdquo; button takes you directly here to pick a client and protocol.
-            </p>
-          </section>
-        </aside>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ParamCard
+              icon={Flame}
+              tint="#C97A56"
+              label="Intensity"
+              value={intensityLabel}
+              note={`pwm hot ${payload.pwmValues.hot[0]}`}
+            />
+            <ParamCard
+              icon={Zap}
+              tint="#F0A500"
+              label="Vibration"
+              value={
+                payload.vibMax <= 150
+                  ? "Calming"
+                  : payload.vibMax <= 200
+                    ? "Moderate"
+                    : "Energising"
+              }
+              note={`vibMax ${payload.vibMax}`}
+            />
+            <ParamCard
+              icon={Activity}
+              tint="#27AE60"
+              label="Cycles"
+              value={`${payload.sessionCount} × ${payload.cycleRepetitions.join("/")}`}
+              note={`edge ${payload.edgeCycleDuration}s`}
+            />
+            <ParamCard
+              icon={Timer}
+              tint="#8B5CF6"
+              label="Duration"
+              value={`${durationMin} min`}
+              note={`${payload.totalDuration}s total`}
+            />
+          </div>
+        </section>
       </div>
+
+      {adjustOpen && (
+        <AdjustModal
+          hot={hotOverride ?? basePayload.pwmValues.hot[0]}
+          vib={vibOverride ?? basePayload.vibMax}
+          onHotChange={setHotOverride}
+          onVibChange={setVibOverride}
+          onReset={() => {
+            setHotOverride(null)
+            setVibOverride(null)
+          }}
+          onClose={() => setAdjustOpen(false)}
+        />
+      )}
     </AppShell>
   )
 }
 
-function StepDot({ number }: { number: number }) {
-  return (
-    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#C97A56]/12 text-[12px] font-semibold text-[#B86A48]">
-      {number}
-    </span>
-  )
-}
-
-function ClientTypeButton({
-  active,
-  onClick,
+function ParamCard({
+  icon: Icon,
+  tint,
   label,
-  icon,
+  value,
+  note,
 }: {
-  active: boolean
-  onClick: () => void
+  icon: React.ComponentType<{ className?: string }>
+  tint: string
   label: string
-  icon: React.ReactNode
+  value: string
+  note: string
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center justify-center gap-2 rounded-[8px] px-3 py-2.5 text-[12.5px] font-semibold transition-colors ${
-        active
-          ? "bg-white text-[#1F2937] shadow-[0_2px_6px_-2px_rgba(0,0,0,0.08)]"
-          : "text-[#6B7280] hover:text-[#1F2937]"
-      }`}
-    >
-      <span className={active ? "text-[#C97A56]" : "text-[#9CA3AF]"}>
-        {icon}
-      </span>
-      <span>{label}</span>
-    </button>
+    <div className="flex flex-col gap-3 rounded-[12px] border border-black/[0.07] bg-white p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#9CA3AF]">
+          {label}
+        </span>
+        <span
+          className="flex h-8 w-8 items-center justify-center rounded-[8px]"
+          style={{ backgroundColor: `${tint}1F`, color: tint }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div>
+        <div className="text-[20px] font-semibold tabular-nums text-[#1F2937]">{value}</div>
+        <div className="mt-0.5 text-[11px] text-[#9CA3AF]">{note}</div>
+      </div>
+    </div>
   )
 }
 
-function ClientPreview({ client }: { client: ApiClient | undefined }) {
-  if (!client) {
-    return (
-      <div className="text-[13px] text-[#9CA3AF]">
-        Select a client from the list above.
-      </div>
-    )
-  }
-
-  const initials = client.full_name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
+function BodyDiagram({
+  sunSide,
+  moonSide,
+}: {
+  sunSide: "left" | "right"
+  moonSide: "left" | "right"
+}) {
+  // Viewer sees the client as if facing them: client's LEFT leg sits on the
+  // viewer's RIGHT, and vice versa. We mirror so L/R labels match client anatomy.
+  const leftIsSun = sunSide === "left"
+  const rightLegFill = leftIsSun ? "url(#sunGrad)" : "url(#moonGrad)"   // client left
+  const leftLegFill = leftIsSun ? "url(#moonGrad)" : "url(#sunGrad)"    // client right
+  const leftGlowOpacity = leftIsSun ? 0 : 1
+  const rightGlowOpacity = leftIsSun ? 1 : 0
 
   return (
-    <div>
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#C97A56]/70 to-[#162532]/70 text-[12px] font-semibold text-white ring-2 ring-white">
-          {initials}
+    <svg viewBox="0 0 220 340" className="h-[260px] w-auto">
+      <defs>
+        <linearGradient id="sunGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#F5B876" />
+          <stop offset="50%" stopColor="#E8925D" />
+          <stop offset="100%" stopColor="#B86A48" />
+        </linearGradient>
+        <linearGradient id="moonGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#9CC9E5" />
+          <stop offset="50%" stopColor="#6DA5C9" />
+          <stop offset="100%" stopColor="#3F7A9F" />
+        </linearGradient>
+        <linearGradient id="skinGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#EADDCC" />
+          <stop offset="100%" stopColor="#D6C6B0" />
+        </linearGradient>
+        <radialGradient id="sunGlow" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor="#F0A500" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#F0A500" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="moonGlow" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor="#4F8FBF" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#4F8FBF" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* ambient glows behind the sun/moon side */}
+      <ellipse
+        cx="70"
+        cy="230"
+        rx="60"
+        ry="90"
+        fill={leftIsSun ? "url(#moonGlow)" : "url(#sunGlow)"}
+        opacity={leftIsSun ? 0.9 : 1}
+      />
+      <ellipse
+        cx="150"
+        cy="230"
+        rx="60"
+        ry="90"
+        fill={leftIsSun ? "url(#sunGlow)" : "url(#moonGlow)"}
+      />
+
+      {/* head */}
+      <circle cx="110" cy="34" r="20" fill="url(#skinGrad)" />
+      <ellipse cx="110" cy="54" rx="10" ry="6" fill="url(#skinGrad)" />
+
+      {/* shoulders + torso */}
+      <path
+        d="M 68 72 Q 110 62 152 72 L 148 92 Q 110 86 72 92 Z"
+        fill="url(#skinGrad)"
+      />
+      <path
+        d="M 72 92 Q 110 86 148 92 L 144 168 Q 110 176 76 168 Z"
+        fill="url(#skinGrad)"
+      />
+
+      {/* arms */}
+      <path
+        d="M 68 72 Q 56 90 54 130 Q 54 150 60 170 L 66 170 Q 70 150 70 130 Q 72 100 78 82 Z"
+        fill="url(#skinGrad)"
+      />
+      <path
+        d="M 152 72 Q 164 90 166 130 Q 166 150 160 170 L 154 170 Q 150 150 150 130 Q 148 100 142 82 Z"
+        fill="url(#skinGrad)"
+      />
+
+      {/* pelvis */}
+      <path
+        d="M 76 168 Q 110 176 144 168 L 138 186 Q 110 192 82 186 Z"
+        fill="url(#skinGrad)"
+      />
+
+      {/* viewer-left leg (= client RIGHT) */}
+      <path
+        d="M 82 186 Q 78 240 76 300 L 96 308 Q 102 250 100 188 Z"
+        fill={leftLegFill}
+        opacity="0.96"
+      />
+      <ellipse cx="89" cy="308" rx="14" ry="5" fill="#1F2937" opacity="0.25" />
+
+      {/* viewer-right leg (= client LEFT) */}
+      <path
+        d="M 120 188 Q 118 250 124 308 L 144 300 Q 142 240 138 186 Z"
+        fill={rightLegFill}
+        opacity="0.96"
+      />
+      <ellipse cx="131" cy="308" rx="14" ry="5" fill="#1F2937" opacity="0.25" />
+
+      {/* focus ring on SUN side leg */}
+      <ellipse
+        cx="89"
+        cy="250"
+        rx="28"
+        ry="70"
+        fill="none"
+        stroke="#F0A500"
+        strokeWidth="1.5"
+        strokeDasharray="3 4"
+        opacity={leftIsSun ? 0 : 0.7}
+      />
+      <ellipse
+        cx="131"
+        cy="250"
+        rx="28"
+        ry="70"
+        fill="none"
+        stroke="#F0A500"
+        strokeWidth="1.5"
+        strokeDasharray="3 4"
+        opacity={leftIsSun ? 0.7 : 0}
+      />
+
+      {/* client LEFT label (viewer right) */}
+      <g transform="translate(175, 240)">
+        <rect x="-26" y="-12" width="52" height="24" rx="12" fill="white" stroke="#E5DCCF" />
+        <text
+          x="0"
+          y="4"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="700"
+          fill={leftIsSun ? "#C97A56" : "#4F8FBF"}
+        >
+          L · {leftIsSun ? "SUN" : "MOON"}
+        </text>
+      </g>
+
+      {/* client RIGHT label (viewer left) */}
+      <g transform="translate(45, 240)">
+        <rect x="-26" y="-12" width="52" height="24" rx="12" fill="white" stroke="#E5DCCF" />
+        <text
+          x="0"
+          y="4"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="700"
+          fill={leftIsSun ? "#4F8FBF" : "#C97A56"}
+        >
+          R · {leftIsSun ? "MOON" : "SUN"}
+        </text>
+      </g>
+
+      {/* connector lines */}
+      <path
+        d="M 153 240 Q 165 240 170 240"
+        stroke="#C97A56"
+        strokeWidth="1"
+        strokeDasharray="2 3"
+        fill="none"
+        opacity="0.6"
+      />
+      <path
+        d="M 67 240 Q 55 240 50 240"
+        stroke="#4F8FBF"
+        strokeWidth="1"
+        strokeDasharray="2 3"
+        fill="none"
+        opacity="0.6"
+      />
+    </svg>
+  )
+}
+
+function AdjustModal({
+  hot,
+  vib,
+  onHotChange,
+  onVibChange,
+  onReset,
+  onClose,
+}: {
+  hot: number
+  vib: number
+  onHotChange: (v: number) => void
+  onVibChange: (v: number) => void
+  onReset: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-[14px] border border-black/[0.07] bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[16px] font-semibold tracking-tight text-[#1F2937]">
+            Adjust protocol
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#9CA3AF] hover:bg-black/5"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-[14.5px] font-semibold text-[#1F2937]">
-            {client.full_name}
+
+        <div className="mt-5 space-y-5">
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-semibold text-[#374151]">Intensity (pwm hot)</label>
+              <span className="text-[12px] tabular-nums text-[#1F2937]">{hot}</span>
+            </div>
+            <input
+              type="range"
+              min={50}
+              max={120}
+              step={5}
+              value={hot}
+              onChange={(e) => onHotChange(Number(e.target.value))}
+              className="mt-2 w-full accent-[#C97A56]"
+            />
+            <div className="mt-1 flex justify-between text-[10px] text-[#9CA3AF]">
+              <span>Gentle</span>
+              <span>Moderate</span>
+              <span>Peak</span>
+            </div>
           </div>
-          <div className="text-[11.5px] text-[#9CA3AF] capitalize">
-            {client.focus_region ?? client.email ?? "No focus area set"}
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-semibold text-[#374151]">Vibration (vibMax)</label>
+              <span className="text-[12px] tabular-nums text-[#1F2937]">{vib}</span>
+            </div>
+            <input
+              type="range"
+              min={100}
+              max={255}
+              step={5}
+              value={vib}
+              onChange={(e) => onVibChange(Number(e.target.value))}
+              className="mt-2 w-full accent-[#C97A56]"
+            />
+            <div className="mt-1 flex justify-between text-[10px] text-[#9CA3AF]">
+              <span>Calming</span>
+              <span>Moderate</span>
+              <span>Energising</span>
+            </div>
           </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex h-9 items-center rounded-[8px] border border-black/[0.07] bg-white px-3 text-[12px] font-medium text-[#374151] hover:border-black/10"
+          >
+            Reset to auto
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 items-center rounded-[8px] bg-[#C97A56] px-4 text-[12px] font-semibold text-white hover:bg-[#B86A48]"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-1.5 text-[11px] text-[#9CA3AF]">
+          <HeartPulse className="h-3 w-3" />
+          Adjustments stay within safe clinical ranges.
         </div>
       </div>
-
-      {client.intake?.notes && (
-        <div className="mt-3 rounded-[10px] border border-black/[0.06] bg-[#F9F8F7] px-3 py-2.5 text-[12.5px] text-[#6B7280] leading-relaxed">
-          {client.intake.notes}
-        </div>
-      )}
     </div>
   )
 }

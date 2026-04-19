@@ -130,7 +130,7 @@ function InsightsContent() {
       ]}
       actions={
         <Link
-          href="/session"
+          href="/session-setup"
           className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 text-[13px] font-semibold text-white shadow-[0_8px_20px_-10px_rgba(201,122,86,0.7)] hover:bg-[#B86A48]"
         >
           <Play className="h-4 w-4" />
@@ -206,7 +206,7 @@ function InsightsContent() {
 
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <Link
-                    href="/session"
+                    href="/session-setup"
                     className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 text-[13px] font-semibold text-white hover:bg-[#B86A48]"
                   >
                     <Play className="h-4 w-4" />

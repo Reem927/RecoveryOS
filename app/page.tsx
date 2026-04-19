@@ -138,7 +138,7 @@ export default function LandingPage() {
               href="/login"
               className="hidden text-[12px] text-white/40 transition-colors hover:text-white md:block"
             >
-              Practitioner Login
+              Practitioner Portal
             </Link>
             <Link
               href="/sign-up"
