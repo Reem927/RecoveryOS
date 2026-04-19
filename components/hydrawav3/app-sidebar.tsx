@@ -19,7 +19,7 @@ import { useActiveSession } from "@/lib/active-session"
 const primaryNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Session Setup", href: "/session-setup", icon: PlayCircle },
-  { label: "Patients", href: "/patients", icon: Users },
+  { label: "Clients", href: "/clients", icon: Users },
   { label: "Assessments", href: "/assessment", icon: ClipboardCheck },
 ]
 
@@ -40,8 +40,8 @@ export function AppSidebar() {
       return pathname === "/dashboard"
     }
 
-    if (href.startsWith("/patients")) {
-      return pathname.startsWith("/patients")
+    if (href.startsWith("/clients")) {
+      return pathname.startsWith("/clients") || pathname.startsWith("/dashboard/clients")
     }
 
     if (href === "/session") {
@@ -52,16 +52,7 @@ export function AppSidebar() {
   }
 
   const handleStartLiveSession = () => {
-    if (!session) {
-      startSession({
-        patientId: "alex-morgan",
-        patientName: "Alex Morgan",
-        protocol: "H3-Beta · 18 min",
-        room: "Room 2",
-      })
-    }
-
-    router.push("/session")
+    router.push("/session-setup")
   }
 
   const handleEndLiveSession = () => {

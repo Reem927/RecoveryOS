@@ -47,7 +47,7 @@ export function Topbar({
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
           <input
             type="search"
-            placeholder="Search patients, sessions…"
+            placeholder="Search clients, sessions…"
             className="h-10 w-64 rounded-[10px] border border-black/[0.07] bg-white pl-9 pr-3 text-[13px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/20"
           />
         </div>

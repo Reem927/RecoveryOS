@@ -53,8 +53,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       </main>
 
       <ChatFAB
-        patientId={DEMO_PATIENT_ID}
-        patientName="Alex Rodriguez"
+        clientId={DEMO_PATIENT_ID}
+        clientName="Alex Rodriguez"
         senderRole="client"
       />
 

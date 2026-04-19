@@ -87,11 +87,13 @@ export default function ClientDashboardPage() {
   // Load patient info
   useEffect(() => {
     async function loadPatient() {
-      const res = await fetch(`/api/patients/${clientId}`)
+      const res = await fetch(`/api/clients/${clientId}`)
       if (res.ok) {
         const data = await res.json()
         setClientName(data.full_name ?? "Client")
-        setLastSession(data.last_session_date ?? null)
+        setLastSession(data.latest_assessment?.created_at
+          ? new Date(data.latest_assessment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : null)
       }
     }
     loadPatient().catch(() => {

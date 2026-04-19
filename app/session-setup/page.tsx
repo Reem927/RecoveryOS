@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -21,54 +21,14 @@ import { useActiveSession } from "@/lib/active-session"
 
 type ClientType = "existing" | "new" | "guest"
 
-type ClientRecord = {
+type ApiClient = {
   id: string
-  name: string
-  age: number
-  lastSession: string
-  lastScore: number
-  lastProtocol: string
-  tags: string[]
+  full_name: string
+  email: string | null
+  focus_region: string | null
+  intake: { notes?: string } | null
+  created_at: string
 }
-
-const clients: ClientRecord[] = [
-  {
-    id: "alex-morgan",
-    name: "Alex Morgan",
-    age: 34,
-    lastSession: "3 days ago",
-    lastScore: 78,
-    lastProtocol: "H3-Alpha · 22 min",
-    tags: ["Post-op shoulder", "Mobility"],
-  },
-  {
-    id: "priya-chandra",
-    name: "Priya Chandra",
-    age: 29,
-    lastSession: "Yesterday",
-    lastScore: 82,
-    lastProtocol: "H3-Beta · 18 min",
-    tags: ["Marathon recovery", "Low HRV"],
-  },
-  {
-    id: "marcus-lee",
-    name: "Marcus Lee",
-    age: 41,
-    lastSession: "New client",
-    lastScore: 0,
-    lastProtocol: "—",
-    tags: ["Lower back", "Intake pending"],
-  },
-  {
-    id: "sofia-alvarez",
-    name: "Sofia Alvarez",
-    age: 52,
-    lastSession: "6 days ago",
-    lastScore: 71,
-    lastProtocol: "H3-Alpha · 22 min",
-    tags: ["Post-surgical", "Knee"],
-  },
-]
 
 export default function SessionSetupPage() {
   const router = useRouter()
@@ -76,27 +36,36 @@ export default function SessionSetupPage() {
 
   const [clientType, setClientType] = useState<ClientType>("existing")
   const [query, setQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string>("alex-morgan")
+  const [selectedId, setSelectedId] = useState<string>("")
   const [newName, setNewName] = useState("")
   const [newAge, setNewAge] = useState("")
   const [newFocus, setNewFocus] = useState("")
+  const [clients, setClients] = useState<ApiClient[]>([])
+  const [loadingClients, setLoadingClients] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/clients")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setClients(data)
+          if (data.length > 0) setSelectedId(data[0].id)
+        }
+      })
+      .finally(() => setLoadingClients(false))
+  }, [])
 
   const filteredClients = useMemo(() => {
     const q = query.trim().toLowerCase()
-
-    if (!q) {
-      return clients
-    }
-
+    if (!q) return clients
     return clients.filter(
-      (client) =>
-        client.name.toLowerCase().includes(q) ||
-        client.tags.some((tag) => tag.toLowerCase().includes(q)),
+      (c) =>
+        c.full_name.toLowerCase().includes(q) ||
+        (c.focus_region ?? "").toLowerCase().includes(q),
     )
-  }, [query])
+  }, [query, clients])
 
-  const selectedClient =
-    clients.find((client) => client.id === selectedId) ?? clients[0]
+  const selectedClient = clients.find((c) => c.id === selectedId) ?? clients[0]
 
   const canContinue =
     clientType === "guest" ||
@@ -106,18 +75,16 @@ export default function SessionSetupPage() {
   const getPatientForSession = () => {
     if (clientType === "existing") {
       return {
-        patientId: selectedClient.id,
-        patientName: selectedClient.name,
+        patientId: selectedClient?.id ?? "",
+        patientName: selectedClient?.full_name ?? "Client",
       }
     }
-
     if (clientType === "new") {
       return {
         patientId: `new-${Date.now()}`,
         patientName: newName.trim() || "New client",
       }
     }
-
     return {
       patientId: "guest",
       patientName: "Guest session",
@@ -206,8 +173,17 @@ export default function SessionSetupPage() {
                   </div>
 
                   <ul className="max-h-[360px] divide-y divide-black/[0.05] overflow-y-auto rounded-[10px] border border-black/[0.06]">
+                    {loadingClients && (
+                      <li className="px-4 py-6 text-center text-sm text-[#9CA3AF]">Loading clients…</li>
+                    )}
+                    {!loadingClients && filteredClients.length === 0 && (
+                      <li className="px-4 py-6 text-center text-sm text-[#9CA3AF]">
+                        {clients.length === 0 ? "No clients yet. Add one from the Clients page." : "No clients match your search."}
+                      </li>
+                    )}
                     {filteredClients.map((client) => {
                       const active = selectedId === client.id
+                      const initials = client.full_name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
 
                       return (
                         <li key={client.id}>
@@ -215,42 +191,19 @@ export default function SessionSetupPage() {
                             type="button"
                             onClick={() => setSelectedId(client.id)}
                             className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
-                              active
-                                ? "bg-[#C97A56]/10"
-                                : "hover:bg-[#F2EDE6]/60"
+                              active ? "bg-[#C97A56]/10" : "hover:bg-[#F2EDE6]/60"
                             }`}
                           >
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C97A56]/70 to-[#162532]/70 text-[12px] font-semibold text-white ring-2 ring-white">
-                              {client.name
-                                .split(" ")
-                                .map((part) => part[0])
-                                .join("")
-                                .slice(0, 2)}
+                              {initials}
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <div className="truncate text-[13.5px] font-semibold text-[#1F2937]">
-                                  {client.name}
-                                </div>
-                                <span className="text-[11px] text-[#9CA3AF]">
-                                  · {client.age}y
-                                </span>
+                              <div className="truncate text-[13.5px] font-semibold text-[#1F2937]">
+                                {client.full_name}
                               </div>
-
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                                <span className="text-[11px] text-[#6B7280]">
-                                  Last session: {client.lastSession}
-                                </span>
-
-                                {client.tags.slice(0, 2).map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="rounded-[5px] bg-[#F2EDE6] px-1.5 py-0.5 text-[10.5px] font-medium text-[#6B7280]"
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
+                              <div className="mt-0.5 text-[11px] text-[#6B7280] capitalize truncate">
+                                {client.focus_region ?? client.email ?? "No focus area"}
                               </div>
                             </div>
 

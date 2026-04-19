@@ -1,103 +1,69 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
-  Activity,
   ArrowRight,
-  CalendarClock,
-  CheckCircle2,
   ClipboardCheck,
   HeartPulse,
-  MoreHorizontal,
   Plus,
-  ScanLine,
   Users,
   Waves,
 } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
 import { StatCard } from "@/components/hydrawav3/stat-card"
+import { useUser } from "@clerk/nextjs"
 
-const todaysSchedule = [
-  {
-    time: "09:00",
-    name: "Alex Morgan",
-    status: "Pre-check ready",
-    statusTone: "accent",
-    reason: "Post-op shoulder · Week 4",
-    href: "/patients/alex-morgan",
-  },
-  {
-    time: "10:15",
-    name: "Priya Chandra",
-    status: "Scanned",
-    statusTone: "success",
-    reason: "Marathon recovery · Low HRV",
-  },
-  {
-    time: "11:30",
-    name: "Marcus Lee",
-    status: "Awaiting intake",
-    statusTone: "warning",
-    reason: "New patient · Lower back",
-  },
-  {
-    time: "13:00",
-    name: "Sofia Alvarez",
-    status: "In session",
-    statusTone: "live",
-    reason: "Protocol H3-Alpha · 00:12:34",
-  },
-  {
-    time: "14:30",
-    name: "Jordan Reyes",
-    status: "Scheduled",
-    statusTone: "muted",
-    reason: "Cervical mobility reassessment",
-  },
-]
-
-const statusStyles: Record<string, string> = {
-  accent: "bg-[#C97A56]/12 text-[#B86A48]",
-  success: "bg-[#27AE60]/12 text-[#1f8e4a]",
-  warning: "bg-[#F0A500]/14 text-[#c47f00]",
-  live: "bg-[#E74C3C]/12 text-[#c0392b]",
-  muted: "bg-[#1F2937]/6 text-[#374151]",
+type Client = {
+  id: string
+  full_name: string
+  focus_region: string | null
+  email: string | null
+  created_at: string
 }
 
-const recentScans = [
-  {
-    patient: "Priya Chandra",
-    score: 78,
-    delta: "+6",
-    protocol: "H3-Beta · 18 min",
-    time: "12m ago",
-  },
-  {
-    patient: "David Park",
-    score: 64,
-    delta: "-3",
-    protocol: "H3-Alpha · 22 min",
-    time: "41m ago",
-  },
-  {
-    patient: "Amira Hassan",
-    score: 91,
-    delta: "+9",
-    protocol: "H3-Gamma · 14 min",
-    time: "2h ago",
-  },
-  {
-    patient: "Tomás Oliveira",
-    score: 72,
-    delta: "+2",
-    protocol: "H3-Beta · 18 min",
-    time: "3h ago",
-  },
-]
+type Assessment = {
+  id: string
+  patient_id: string
+  primary_area: string | null
+  created_at: string
+  ai_summary: {
+    primary_focus_area?: string
+    protocol_recommendation?: { name: string }
+  } | null
+}
 
 export default function DashboardPage() {
+  const { user } = useUser()
+  const [clients, setClients] = useState<Client[]>([])
+  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/clients").then((r) => r.json()),
+      fetch("/api/assessments/recent").then((r) => r.json()),
+    ]).then(([clientData, assessmentData]) => {
+      if (Array.isArray(clientData)) setClients(clientData)
+      if (Array.isArray(assessmentData)) setAssessments(assessmentData)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  const clientMap = new Map(clients.map((c) => [c.id, c]))
+
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return "Good morning"
+    if (h < 17) return "Good afternoon"
+    return "Good evening"
+  })()
+
+  const displayName = user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "there"
+
   return (
     <AppShell
-      title="Good morning, Dr. Ruiz"
-      eyebrow="Monday · 21 April 2026"
+      title={`${greeting}, ${displayName}`}
+      eyebrow={new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
       actions={
         <Link
           href="/session-setup"
@@ -109,115 +75,167 @@ export default function DashboardPage() {
       }
     >
       <div className="space-y-6">
-        {/* Hero summary */}
+        {/* Stats */}
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="Patients today"
-            value={12}
-            delta="+2"
-            trend="up"
+            label="Total clients"
+            value={loading ? "—" : clients.length}
             icon={Users}
             tint="accent"
-            footnote="4 new intakes"
+            footnote="Active roster"
           />
           <StatCard
-            label="Avg recovery score"
-            value="78"
-            unit="/ 100"
-            delta="+4.2%"
-            trend="up"
+            label="Assessments"
+            value={loading ? "—" : assessments.length}
             icon={HeartPulse}
             tint="success"
-            footnote="vs last week"
+            footnote="All time"
           />
           <StatCard
-            label="Sessions completed"
-            value={37}
-            delta="+11"
-            trend="up"
+            label="This week"
+            value={loading ? "—" : assessments.filter((a) => {
+              const d = new Date(a.created_at)
+              const now = new Date()
+              const weekAgo = new Date(now)
+              weekAgo.setDate(now.getDate() - 7)
+              return d >= weekAgo
+            }).length}
             icon={Waves}
             tint="purple"
-            footnote="This week"
+            footnote="Recent assessments"
           />
           <StatCard
-            label="Pre-checks pending"
-            value={3}
-            delta="-1"
-            trend="down"
+            label="AI summaries"
+            value={loading ? "—" : assessments.filter((a) => a.ai_summary).length}
             icon={ClipboardCheck}
             tint="warning"
-            footnote="Clear before 13:00"
+            footnote="With recovery insights"
           />
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-          {/* Schedule */}
+          {/* Recent clients */}
           <section className="rounded-[12px] border border-black/[0.07] bg-white">
             <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                  Today&apos;s schedule
+                  Client roster
                 </p>
                 <h2 className="mt-1 text-[16px] font-semibold tracking-tight text-[#1F2937]">
-                  5 patients · 2h 45m booked
+                  {loading ? "Loading…" : `${clients.length} client${clients.length !== 1 ? "s" : ""}`}
                 </h2>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="flex h-9 items-center gap-1.5 rounded-[8px] border border-black/[0.07] bg-white px-3 text-[12px] font-medium text-[#374151] hover:border-black/10">
-                  <CalendarClock className="h-3.5 w-3.5 text-[#C97A56]" />
-                  Day view
-                </button>
-                <button
-                  type="button"
-                  aria-label="More"
-                  className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black/[0.07] bg-white text-[#374151] hover:border-black/10"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </div>
+              <Link
+                href="/clients"
+                className="text-[12px] font-medium text-[#C97A56] hover:text-[#B86A48]"
+              >
+                View all
+              </Link>
             </div>
 
-            <ul className="divide-y divide-black/[0.05]">
-              {todaysSchedule.map((slot) => (
-                <li
-                  key={slot.time + slot.name}
-                  className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-[#F2EDE6]/60"
+            {loading && (
+              <div className="px-5 py-8 text-center text-sm text-[#9CA3AF]">Loading clients…</div>
+            )}
+
+            {!loading && clients.length === 0 && (
+              <div className="px-5 py-8 text-center">
+                <p className="text-sm text-[#9CA3AF]">No clients yet.</p>
+                <Link
+                  href="/clients/new"
+                  className="mt-2 inline-flex text-sm font-medium text-[#C97A56] hover:text-[#B86A48]"
                 >
-                  <div className="w-14 shrink-0 text-[13px] font-semibold tabular-nums text-[#1F2937]">
-                    {slot.time}
-                  </div>
-                  <div
-                    aria-hidden
-                    className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-[#C97A56]/60 to-[#162532]/70 ring-2 ring-white"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] font-semibold text-[#1F2937]">
-                      {slot.name}
+                  Add your first client →
+                </Link>
+              </div>
+            )}
+
+            <ul className="divide-y divide-black/[0.05]">
+              {clients.slice(0, 6).map((client) => {
+                const initials = client.full_name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()
+                return (
+                  <li
+                    key={client.id}
+                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-[#F2EDE6]/60"
+                  >
+                    <div className="h-9 w-9 shrink-0 rounded-full bg-[#C97A56]/15 flex items-center justify-center text-[12px] font-semibold text-[#C97A56]">
+                      {initials}
                     </div>
-                    <div className="truncate text-[12px] text-[#6B7280]">{slot.reason}</div>
-                  </div>
-                  <span
-                    className={`hidden rounded-[6px] px-2 py-1 text-[11px] font-medium md:inline-flex ${statusStyles[slot.statusTone]}`}
-                  >
-                    {slot.statusTone === "live" && (
-                      <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-[#E74C3C]" />
-                    )}
-                    {slot.status}
-                  </span>
-                  <Link
-                    href={slot.href ?? "#"}
-                    className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-black/[0.07] bg-white px-2.5 text-[12px] font-medium text-[#1F2937] transition-colors hover:border-[#C97A56]/40 hover:text-[#C97A56]"
-                  >
-                    Open
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </li>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[14px] font-semibold text-[#1F2937]">
+                        {client.full_name}
+                      </div>
+                      <div className="truncate text-[12px] text-[#6B7280] capitalize">
+                        {client.focus_region ?? client.email ?? "No focus area set"}
+                      </div>
+                    </div>
+                    <Link
+                      href={`/dashboard/clients/${client.id}`}
+                      className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-black/[0.07] bg-white px-2.5 text-[12px] font-medium text-[#1F2937] transition-colors hover:border-[#C97A56]/40 hover:text-[#C97A56]"
+                    >
+                      Open
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
           </section>
 
-          {/* Right rail */}
+          {/* Recent assessments */}
           <section className="space-y-6">
+            <div className="rounded-[12px] border border-black/[0.07] bg-white">
+              <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
+                    Recent assessments
+                  </p>
+                  <h3 className="mt-1 text-[15px] font-semibold tracking-tight text-[#1F2937]">
+                    Latest recovery insights
+                  </h3>
+                </div>
+              </div>
+
+              {loading && (
+                <div className="px-5 py-8 text-center text-sm text-[#9CA3AF]">Loading…</div>
+              )}
+
+              {!loading && assessments.length === 0 && (
+                <div className="px-5 py-8 text-center text-sm text-[#9CA3AF]">
+                  No assessments yet. Open a client to create one.
+                </div>
+              )}
+
+              <ul className="divide-y divide-black/[0.05]">
+                {assessments.slice(0, 5).map((assessment) => {
+                  const client = clientMap.get(assessment.patient_id)
+                  const protocolName = assessment.ai_summary?.protocol_recommendation?.name
+                  return (
+                    <li key={assessment.id} className="flex items-center gap-3 px-5 py-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#F2EDE6] text-[11px] font-semibold text-[#C97A56] capitalize shrink-0">
+                        {(assessment.primary_area ?? "—").slice(0, 3)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-semibold text-[#1F2937]">
+                          {client?.full_name ?? "Unknown client"}
+                        </div>
+                        <div className="truncate text-[11px] text-[#9CA3AF]">
+                          {protocolName ?? assessment.primary_area ?? "Assessment"}
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-[#9CA3AF] shrink-0">
+                        {new Date(assessment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+
             {/* Quick start */}
             <div className="relative overflow-hidden rounded-[12px] border border-black/[0.07] bg-[#162532] p-5 text-white">
               <div
@@ -229,96 +247,21 @@ export default function DashboardPage() {
                   Quick start
                 </p>
                 <h3 className="mt-1 text-[18px] font-semibold tracking-tight">
-                  Next: Alex Morgan
+                  Start a session
                 </h3>
                 <p className="mt-1 text-[13px] text-white/60">
-                  Post-op shoulder · Week 4 of 12. Pre-check can be completed in ~90 seconds.
+                  Select a client and protocol to begin a new recovery session.
                 </p>
-                <div className="mt-5 flex items-center gap-2">
+                <div className="mt-5">
                   <Link
                     href="/session-setup"
                     className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 text-[13px] font-semibold text-white hover:bg-[#B86A48]"
                   >
-                    <ScanLine className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Set up session
                   </Link>
-                  <Link
-                    href="/patients/alex-morgan"
-                    className="inline-flex h-10 items-center rounded-[10px] border border-white/15 bg-white/[0.04] px-3 text-[13px] font-medium text-white/80 hover:bg-white/[0.08]"
-                  >
-                    View chart
-                  </Link>
                 </div>
               </div>
-            </div>
-
-            {/* Recent scans */}
-            <div className="rounded-[12px] border border-black/[0.07] bg-white">
-              <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                    Recent scans
-                  </p>
-                  <h3 className="mt-1 text-[15px] font-semibold tracking-tight text-[#1F2937]">
-                    Latest recovery scores
-                  </h3>
-                </div>
-                <Link
-                  href="/patients"
-                  className="text-[12px] font-medium text-[#C97A56] hover:text-[#B86A48]"
-                >
-                  View all
-                </Link>
-              </div>
-              <ul className="divide-y divide-black/[0.05]">
-                {recentScans.map((row) => {
-                  const deltaPositive = row.delta.startsWith("+")
-                  return (
-                    <li
-                      key={row.patient}
-                      className="flex items-center gap-3 px-5 py-3"
-                    >
-                      <div className="relative flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#F2EDE6] text-[13px] font-semibold text-[#1F2937]">
-                        {row.score}
-                        <span
-                          className={`absolute -right-1 -top-1 rounded-full px-1 text-[9px] font-semibold ${
-                            deltaPositive
-                              ? "bg-[#27AE60] text-white"
-                              : "bg-[#E74C3C] text-white"
-                          }`}
-                        >
-                          {row.delta}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-semibold text-[#1F2937]">
-                          {row.patient}
-                        </div>
-                        <div className="truncate text-[11px] text-[#9CA3AF]">
-                          {row.protocol}
-                        </div>
-                      </div>
-                      <span className="text-[11px] text-[#9CA3AF]">{row.time}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-
-            {/* System status */}
-            <div className="flex items-center gap-3 rounded-[12px] border border-[#27AE60]/20 bg-[#27AE60]/8 px-4 py-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1A7A45] text-white">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-              </span>
-              <div className="flex-1">
-                <div className="text-[12px] font-semibold text-[#1F2937]">
-                  Camera & sensors calibrated
-                </div>
-                <div className="text-[11px] text-[#6B7280]">
-                  Room 2 · Last check 4 minutes ago
-                </div>
-              </div>
-              <Activity className="h-4 w-4 text-[#27AE60]" />
             </div>
           </section>
         </div>
