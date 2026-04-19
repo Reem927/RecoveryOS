@@ -4,7 +4,8 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { StepIndicator } from "@/components/onboarding/step-indicator"
-import { submitAccountInfo, PRACTITIONER_TITLES } from "../actions"
+import { submitAccountInfo } from "../actions"
+import { PRACTITIONER_TITLES } from "../constants"
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null
