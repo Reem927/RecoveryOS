@@ -1,6 +1,6 @@
-import { SignIn } from "@clerk/nextjs"
+import { SignUp } from "@clerk/nextjs"
 
-export default function LoginPage() {
+export default function SignUpPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0F1E28] px-4 py-10">
       <div className="w-full max-w-md">
@@ -9,13 +9,13 @@ export default function LoginPage() {
             RecoveryOS
           </h1>
           <p className="mt-2 text-sm text-white/60">
-            Sign in to continue
+            Create your account
           </p>
         </div>
 
-        <SignIn
+        <SignUp
           routing="hash"
-          signUpUrl="/sign-up"
+          signInUrl="/login"
           fallbackRedirectUrl="/dashboard"
           forceRedirectUrl="/dashboard"
           appearance={{
