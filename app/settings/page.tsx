@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getClinicColleagues } from "./actions"
 import Link from "next/link"
 import {
   Bell,
@@ -19,7 +20,6 @@ import {
   Smartphone,
   Trash2,
   UserCircle2,
-  UserPlus,
   Users,
   Waves,
   Wifi,
@@ -413,70 +413,59 @@ function DevicesSection() {
 }
 
 function TeamSection() {
-  const members = [
-    {
-      name: "Dr. Elena Ruiz",
-      role: "Owner · Lead practitioner",
-      email: "elena.ruiz@hydrawav3.clinic",
-      you: true,
-    },
-    {
-      name: "Arjun Mehra",
-      role: "Practitioner",
-      email: "arjun@hydrawav3.clinic",
-      you: false,
-    },
-    {
-      name: "Sofia Okafor",
-      role: "Front desk",
-      email: "sofia@hydrawav3.clinic",
-      you: false,
-    },
-  ]
+  const [members, setMembers] = useState<
+    { id: string; full_name: string; title: string | null; email: string | null; isYou: boolean }[]
+  >([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getClinicColleagues().then((data) => {
+      setMembers(data)
+      setLoading(false)
+    })
+  }, [])
 
   return (
     <Card
       title="Team"
-      description="Invite teammates and control who can see patient data."
-      actions={
-        <button className="inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-[#C97A56] px-3 text-[12.5px] font-semibold text-white hover:bg-[#B86A48]">
-          <UserPlus className="h-3.5 w-3.5" />
-          Invite member
-        </button>
-      }
+      description="Everyone currently working at your clinic."
     >
-      <ul className="divide-y divide-black/[0.05] rounded-[10px] border border-black/[0.07]">
-        {members.map((m) => (
-          <li key={m.email} className="flex items-center gap-3 px-4 py-3.5">
-            <div
-              aria-hidden
-              className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-[#C97A56] to-[#7a3d22] ring-2 ring-white shadow-sm"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-[13.5px] font-semibold text-[#1F2937]">
-                  {m.name}
-                </span>
-                {m.you && (
-                  <span className="rounded-[5px] bg-[#C97A56]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[#B86A48]">
-                    You
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-[13px] text-[#9CA3AF]">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#C97A56] border-t-transparent" />
+          Loading…
+        </div>
+      ) : members.length === 0 ? (
+        <p className="py-4 text-center text-[13px] text-[#9CA3AF]">
+          No teammates found at your clinic.
+        </p>
+      ) : (
+        <ul className="divide-y divide-black/[0.05] rounded-[10px] border border-black/[0.07]">
+          {members.map((m) => (
+            <li key={m.id} className="flex items-center gap-3 px-4 py-3.5">
+              <div
+                aria-hidden
+                className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-[#C97A56] to-[#7a3d22] ring-2 ring-white shadow-sm"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-[13.5px] font-semibold text-[#1F2937]">
+                    {m.full_name}
                   </span>
-                )}
+                  {m.isYou && (
+                    <span className="rounded-[5px] bg-[#C97A56]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[#B86A48]">
+                      You
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 truncate text-[11.5px] text-[#9CA3AF]">
+                  {[m.title, m.email].filter(Boolean).join(" · ")}
+                </div>
               </div>
-              <div className="mt-0.5 truncate text-[11.5px] text-[#9CA3AF]">
-                {m.role} · {m.email}
-              </div>
-            </div>
-            {!m.you && (
-              <div className="flex items-center gap-1.5">
-                <button className="inline-flex h-8 items-center rounded-[8px] border border-black/[0.07] bg-white px-2.5 text-[12px] font-medium text-[#374151] hover:border-black/10">
-                  Manage
-                </button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

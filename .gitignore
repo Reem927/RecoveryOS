@@ -11,10 +11,12 @@ next.user-config.*
 .env*.local
 .env
 .env.local
+/supabase
 
 # Common ignores
 node_modules
 .next/
 .DS_Store
+.worktrees/
 # clerk configuration (can include secrets)
 /.clerk/
