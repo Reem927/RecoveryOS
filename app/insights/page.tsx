@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import {
   Activity,
   AlertTriangle,
@@ -17,6 +20,7 @@ import {
 } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
 import { AssessmentStepper, type Step } from "@/components/hydrawav3/assessment-stepper"
+import type { MuscleScore } from "@/lib/leg-assessment-engine"
 
 const steps: Step[] = [
   { label: "Consent", status: "done", meta: "09:02" },
@@ -26,7 +30,7 @@ const steps: Step[] = [
   { label: "Session", status: "todo" },
 ]
 
-const breakdown = [
+const defaultBreakdown = [
   {
     label: "Movement quality",
     value: 84,
@@ -57,7 +61,40 @@ const breakdown = [
   },
 ]
 
+function buildBreakdownFromScores(scores: MuscleScore[]) {
+  const top4 = scores.slice(0, 4)
+  const icons = [Activity, Zap, HeartPulse, Wind] as const
+  const tints = ["#C97A56", "#F0A500", "#27AE60", "#8B5CF6"]
+  const labels = ["Movement Quality", "Symmetry", "Cardio Readiness", "Breathing Stability"]
+
+  return top4.map((ms, i) => ({
+    label: labels[i],
+    value: Math.max(0, 100 - ms.dysfunctionScore),
+    note: ms.evidence[0] ?? ms.muscle.name,
+    icon: icons[i],
+    tint: tints[i],
+  }))
+}
+
 export default function InsightsPage() {
+  const [breakdown, setBreakdown] = useState(defaultBreakdown)
+  const [recoveryScore, setRecoveryScore] = useState(81)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("hw3_muscle_scores")
+      if (!raw) return
+      const scores: MuscleScore[] = JSON.parse(raw)
+      if (!scores.length) return
+      const built = buildBreakdownFromScores(scores)
+      setBreakdown(built)
+      const avg = Math.round(built.reduce((s, b) => s + b.value, 0) / built.length)
+      setRecoveryScore(avg)
+    } catch {
+      // fall back to defaults
+    }
+  }, [])
+
   return (
     <AppShell
       title="Recovery insights · Alex Morgan"
@@ -107,7 +144,7 @@ export default function InsightsPage() {
                     strokeWidth="10"
                     strokeLinecap="round"
                     strokeDasharray={2 * Math.PI * 52}
-                    strokeDashoffset={2 * Math.PI * 52 * (1 - 0.81)}
+                    strokeDashoffset={2 * Math.PI * 52 * (1 - recoveryScore / 100)}
                   />
                   <defs>
                     <linearGradient id="scoreGrad" x1="0" y1="0" x2="1" y2="1">
@@ -121,7 +158,7 @@ export default function InsightsPage() {
                     Recovery
                   </span>
                   <span className="mt-1 text-[44px] font-semibold tabular-nums leading-none">
-                    81
+                    {recoveryScore}
                   </span>
                   <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#27AE60]/20 px-2 py-0.5 text-[11px] font-medium text-[#6ee7a7]">
                     <ArrowRight className="h-3 w-3 -rotate-45" /> +3 from last
