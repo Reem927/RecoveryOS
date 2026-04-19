@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { Suspense, useEffect, useState } from "react"
 import {
   Activity,
   AlertTriangle,
@@ -11,53 +14,112 @@ import {
   Info,
   Play,
   Sparkles,
+  Video,
   Waves,
   Wind,
   Zap,
 } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
 import { AssessmentStepper, type Step } from "@/components/hydrawav3/assessment-stepper"
+import type { MuscleScore } from "@/lib/leg-assessment-engine"
+import { supabase } from "@/lib/supabase"
+import { useSearchParams } from "next/navigation"
 
-const steps: Step[] = [
-  { label: "Consent", status: "done", meta: "09:02" },
-  { label: "Intake", status: "done", meta: "09:04" },
-  { label: "Camera scan", status: "done", meta: "09:06" },
-  { label: "Insights", status: "active", meta: "Ready" },
-  { label: "Session", status: "todo" },
-]
+function InsightsContent() {
+  const searchParams = useSearchParams()
+  const scanId = searchParams.get("scan")
 
-const breakdown = [
-  {
-    label: "Movement quality",
-    value: 84,
-    note: "Smooth scapular tracking on left side",
-    icon: Activity,
-    tint: "#C97A56",
-  },
-  {
-    label: "Symmetry",
-    value: 72,
-    note: "7% asymmetry on right shoulder abduction",
-    icon: Zap,
-    tint: "#F0A500",
-  },
-  {
-    label: "Cardio readiness",
-    value: 86,
-    note: "HRV 62 ms · within target band",
-    icon: HeartPulse,
-    tint: "#27AE60",
-  },
-  {
-    label: "Breathing stability",
-    value: 80,
-    note: "14 rpm · minor chest dominance",
-    icon: Wind,
-    tint: "#8B5CF6",
-  },
-]
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [showVideo, setShowVideo] = useState(false)
 
-export default function InsightsPage() {
+  useEffect(() => {
+    async function fetchVideoUrl() {
+      if (!scanId) return
+      const { data } = await supabase
+        .from("cv_scans")
+        .select("metrics")
+        .eq("id", scanId)
+        .single()
+      const metrics = data?.metrics as Record<string, unknown> | undefined
+      if (metrics?.videoUrl) {
+        setVideoUrl(metrics.videoUrl as string)
+      }
+    }
+    fetchVideoUrl()
+  }, [scanId])
+
+  const steps: Step[] = [
+    { label: "Consent", status: "done", meta: "09:02" },
+    { label: "Intake", status: "done", meta: "09:04" },
+    { label: "Camera scan", status: "done", meta: "09:06" },
+    { label: "Insights", status: "active", meta: "Ready" },
+    { label: "Session", status: "todo" },
+  ]
+
+  const defaultBreakdown = [
+    {
+      label: "Movement quality",
+      value: 84,
+      note: "Smooth scapular tracking on left side",
+      icon: Activity,
+      tint: "#C97A56",
+    },
+    {
+      label: "Symmetry",
+      value: 72,
+      note: "7% asymmetry on right shoulder abduction",
+      icon: Zap,
+      tint: "#F0A500",
+    },
+    {
+      label: "Cardio readiness",
+      value: 86,
+      note: "HRV 62 ms · within target band",
+      icon: HeartPulse,
+      tint: "#27AE60",
+    },
+    {
+      label: "Breathing stability",
+      value: 80,
+      note: "14 rpm · minor chest dominance",
+      icon: Wind,
+      tint: "#8B5CF6",
+    },
+  ]
+
+  function buildBreakdownFromScores(scores: MuscleScore[]) {
+    const top4 = scores.slice(0, 4)
+    const icons = [Activity, Zap, HeartPulse, Wind] as const
+    const tints = ["#C97A56", "#F0A500", "#27AE60", "#8B5CF6"]
+    const labels = ["Movement Quality", "Symmetry", "Cardio Readiness", "Breathing Stability"]
+
+    return top4.map((ms, i) => ({
+      label: labels[i],
+      value: Math.max(0, 100 - ms.dysfunctionScore),
+      note: ms.evidence[0] ?? ms.muscle.name,
+      icon: icons[i],
+      tint: tints[i],
+    }))
+  }
+
+  const [breakdown, setBreakdown] = useState(defaultBreakdown)
+  const [recoveryScore, setRecoveryScore] = useState(81)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("hw3_muscle_scores")
+      if (!raw) return
+      const scores: MuscleScore[] = JSON.parse(raw)
+      if (!scores.length) return
+      const built = buildBreakdownFromScores(scores)
+      setBreakdown(built)
+      const avg = Math.round(built.reduce((s, b) => s + b.value, 0) / built.length)
+      setRecoveryScore(avg)
+    } catch {
+      // fall back to defaults
+    }
+  }, [])
+
   return (
     <AppShell
       title="Recovery insights · Alex Morgan"
@@ -80,14 +142,12 @@ export default function InsightsPage() {
         <AssessmentStepper steps={steps} />
 
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-          {/* Recovery score hero */}
           <section className="relative overflow-hidden rounded-[12px] border border-black/[0.07] bg-gradient-to-br from-[#162532] via-[#1A2E3B] to-[#162532] p-6 text-white">
             <div
               aria-hidden
               className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#C97A56]/20 blur-[100px]"
             />
             <div className="relative flex flex-col gap-6 md:flex-row md:items-center">
-              {/* Score ring */}
               <div className="relative mx-auto flex h-[180px] w-[180px] shrink-0 items-center justify-center">
                 <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
                   <circle
@@ -107,7 +167,7 @@ export default function InsightsPage() {
                     strokeWidth="10"
                     strokeLinecap="round"
                     strokeDasharray={2 * Math.PI * 52}
-                    strokeDashoffset={2 * Math.PI * 52 * (1 - 0.81)}
+                    strokeDashoffset={2 * Math.PI * 52 * (1 - recoveryScore / 100)}
                   />
                   <defs>
                     <linearGradient id="scoreGrad" x1="0" y1="0" x2="1" y2="1">
@@ -121,7 +181,7 @@ export default function InsightsPage() {
                     Recovery
                   </span>
                   <span className="mt-1 text-[44px] font-semibold tabular-nums leading-none">
-                    81
+                    {recoveryScore}
                   </span>
                   <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#27AE60]/20 px-2 py-0.5 text-[11px] font-medium text-[#6ee7a7]">
                     <ArrowRight className="h-3 w-3 -rotate-45" /> +3 from last
@@ -160,7 +220,6 @@ export default function InsightsPage() {
             </div>
           </section>
 
-          {/* Recommended protocol */}
           <section className="relative overflow-hidden rounded-[12px] border border-[#C97A56]/30 bg-white p-6">
             <div
               aria-hidden
@@ -219,7 +278,6 @@ export default function InsightsPage() {
           </section>
         </div>
 
-        {/* Breakdown */}
         <section className="rounded-[12px] border border-black/[0.07] bg-white p-5">
           <div className="mb-5 flex items-center justify-between">
             <div>
@@ -273,7 +331,6 @@ export default function InsightsPage() {
           </div>
         </section>
 
-        {/* Alternatives + flags */}
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
           <section className="rounded-[12px] border border-black/[0.07] bg-white p-5">
             <div className="mb-4 flex items-center justify-between">
@@ -386,6 +443,30 @@ export default function InsightsPage() {
                 </div>
               </div>
             </div>
+            {videoUrl ? (
+              <div className="rounded-[12px] border border-black/[0.07] bg-white p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Video className="h-4 w-4 text-[#C97A56]" />
+                    <span className="text-[13px] font-semibold text-[#1F2937]">Session recording</span>
+                  </div>
+                  <button
+                    onClick={() => setShowVideo(!showVideo)}
+                    className="text-[12px] font-medium text-[#C97A56]"
+                  >
+                    {showVideo ? "Hide" : "Play"}
+                  </button>
+                </div>
+                {showVideo && (
+                  <video
+                    src={videoUrl}
+                    controls
+                    className="aspect-video w-full rounded-[8px] bg-black"
+                  />
+                )}
+              </div>
+            ) : null}
+
             <div className="flex items-center gap-2 rounded-[10px] bg-[#1A7A45] px-4 py-3 text-[12px] font-medium text-white">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15">
                 <CheckCircle2 className="h-3 w-3" />
@@ -396,5 +477,13 @@ export default function InsightsPage() {
         </div>
       </div>
     </AppShell>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#162532] text-white">Loading...</div>}>
+      <InsightsContent />
+    </Suspense>
   )
 }
