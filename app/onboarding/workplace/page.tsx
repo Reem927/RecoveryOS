@@ -14,11 +14,11 @@ import {
 } from "lucide-react"
 import { StepIndicator } from "@/components/onboarding/step-indicator"
 import {
-  CLINIC_TYPES,
   createClinic,
   requestJoinClinic,
   searchClinicsByType,
 } from "../actions"
+import { CLINIC_TYPES } from "../constants"
 
 type ClinicResult = Awaited<ReturnType<typeof searchClinicsByType>>[number]
 
