@@ -3,11 +3,9 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Activity,
   ClipboardCheck,
   LayoutDashboard,
   LifeBuoy,
-  LineChart,
   LogOut,
   PlayCircle,
   Settings,
@@ -21,10 +19,8 @@ import { useActiveSession } from "@/lib/active-session"
 const primaryNav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Session Setup", href: "/session-setup", icon: PlayCircle },
-  { label: "Patients", href: "/patients/alex-morgan", icon: Users },
+  { label: "Patients", href: "/patients", icon: Users },
   { label: "Assessments", href: "/assessment", icon: ClipboardCheck },
-  { label: "Live Session", href: "/session", icon: Activity },
-  { label: "Progress", href: "/progress", icon: LineChart },
 ]
 
 const secondaryNav = [
@@ -41,7 +37,7 @@ export function AppSidebar() {
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
-      return pathname === "/" || pathname === "/dashboard"
+      return pathname === "/dashboard"
     }
 
     if (href.startsWith("/patients")) {

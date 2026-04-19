@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node -e \"const {execSync}=require\\('child_process'\\); try { execSync\\('npx tsc --noEmit --skipLibCheck 2>&1', {stdio:'pipe'}\\); console.log\\('OK'\\) } catch\\(e\\) { console.log\\(e.stdout?.toString\\(\\).slice\\(0,600\\)\\) }\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

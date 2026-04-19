@@ -25,20 +25,15 @@ import { useActiveSession, useElapsed } from "@/lib/active-session"
 
 export default function SessionPage() {
   const router = useRouter()
-  const { session, startSession, endSession, ready } = useActiveSession()
+  const { session, endSession, ready } = useActiveSession()
   const elapsed = useElapsed(session?.startedAt)
 
   useEffect(() => {
     if (!ready) return
     if (!session) {
-      startSession({
-        patientId: "alex-morgan",
-        patientName: "Alex Morgan",
-        protocol: "H3-Beta · 18 min",
-        room: "Room 2",
-      })
+      router.replace("/session-setup")
     }
-  }, [ready, session, startSession])
+  }, [ready, session, router])
 
   const patientName = session?.patientName ?? "Alex Morgan"
   const protocolLabel = session?.protocol ?? "H3-Beta · 18 min"
