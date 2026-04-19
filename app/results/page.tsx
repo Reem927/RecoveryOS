@@ -356,7 +356,7 @@ export default function ResultsPage() {
                 </label>
               </div>
               <Link
-                href="/progress"
+                href="/patients/alex-morgan"
                 className="mt-4 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[8px] border border-black/[0.07] bg-white text-[12px] font-medium text-[#374151] hover:border-black/10"
               >
                 View long-term progress

@@ -264,7 +264,7 @@ export default function DashboardPage() {
                   </h3>
                 </div>
                 <Link
-                  href="/progress"
+                  href="/patients"
                   className="text-[12px] font-medium text-[#C97A56] hover:text-[#B86A48]"
                 >
                   View all
