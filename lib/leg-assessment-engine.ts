@@ -508,6 +508,41 @@ export function computeSymmetryScore(leftAngle: number, rightAngle: number): num
   return Math.round(Math.max(0, 100 - pct * 3))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Worse-Side Detection
+// Averages left vs right joint angles across all performances. The side with
+// the lower average range of motion is "worse" (more restricted). Used by the
+// Hydrawav3 protocol builder to decide Sun/Moon pad placement.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeWorseSide(
+  performances: ExercisePerformance[],
+): "left" | "right" | "symmetric" {
+  const targetJoints = ["knee", "hip"]
+  let leftSum = 0
+  let rightSum = 0
+  let samples = 0
+
+  performances.forEach((perf) => {
+    Object.entries(perf.jointAngles).forEach(([joint, pair]) => {
+      const lowered = joint.toLowerCase()
+      if (!targetJoints.some((t) => lowered.includes(t))) return
+      if (typeof pair.left !== "number" || typeof pair.right !== "number") return
+      leftSum += pair.left
+      rightSum += pair.right
+      samples += 1
+    })
+  })
+
+  if (samples === 0) return "symmetric"
+
+  const leftAvg = leftSum / samples
+  const rightAvg = rightSum / samples
+  const diff = Math.abs(leftAvg - rightAvg)
+  if (diff < 5) return "symmetric"
+  return leftAvg < rightAvg ? "left" : "right"
+}
+
 // MediaPipe landmark indices for full body tracking
 export const MEDIAPIPE_LANDMARKS = {
   NOSE: 0,
