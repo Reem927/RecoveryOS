@@ -1,6 +1,10 @@
 import Link from "next/link"
 import Image from "next/image"
 import { LogOut } from "lucide-react"
+import { ChatFAB } from "@/components/chat-fab"
+
+// TODO: replace with real patient ID from Clerk session
+const DEMO_PATIENT_ID = "00000000-0000-0000-0000-000000000001"
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,6 +51,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       <main className="flex-1 px-4 py-6 md:px-8 md:py-8">
         {children}
       </main>
+
+      <ChatFAB
+        patientId={DEMO_PATIENT_ID}
+        patientName="Alex Rodriguez"
+        senderRole="client"
+      />
 
       <style>{`
         @keyframes sona-pulse {
