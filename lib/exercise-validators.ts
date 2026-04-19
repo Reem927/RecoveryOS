@@ -134,8 +134,8 @@ export function validateExerciseFrame(args: {
     case "hip_hinge":
       return validateHipHinge(lms, angles)
 
-    case "calf_raise":
-      return validateCalfRaise(lms, angles)
+    case "lateral_lunge":
+      return validateLateralLunge(lms, angles)
 
     default:
       return {
@@ -354,25 +354,63 @@ function validateHipHinge(lms: Landmark[], angles: any): ExerciseValidation {
   }
 }
 
-function validateCalfRaise(lms: Landmark[], angles: any): ExerciseValidation {
-  const leftHeelY = p(lms, L.LEFT_HEEL).y
-  const rightHeelY = p(lms, L.RIGHT_HEEL).y
-  const heelSymmetry = Math.abs(leftHeelY - rightHeelY)
+function validateLateralLunge(lms: Landmark[], angles: any): ExerciseValidation {
+  if (!lowerBodyVisible(lms)) {
+    return {
+      ready: false,
+      validFrame: false,
+      repSignal: 0,
+      patterns: ["lower_body_not_visible"],
+      formHint: "Step back until your hips, knees, ankles, and feet are visible.",
+      debug: {},
+    }
+  }
 
-  const avgAnkle = avg([angles.ankleL, angles.ankleR])
+  const leftHip = p(lms, L.LEFT_HIP)
+  const rightHip = p(lms, L.RIGHT_HIP)
+  const leftKnee = p(lms, L.LEFT_KNEE)
+  const rightKnee = p(lms, L.RIGHT_KNEE)
+  const leftAnkle = p(lms, L.LEFT_ANKLE)
+  const rightAnkle = p(lms, L.RIGHT_ANKLE)
+
+  const hipCenterX = (leftHip.x + rightHip.x) / 2
+  const ankleCenterX = (leftAnkle.x + rightAnkle.x) / 2
+
+  const ankleWidth = Math.max(Math.abs(leftAnkle.x - rightAnkle.x), 0.05)
+  const lateralShift = Math.abs(hipCenterX - ankleCenterX) / ankleWidth
+
+  const kneeDiff = Math.abs(angles.kneeL - angles.kneeR)
+  const bentKnee = Math.min(angles.kneeL, angles.kneeR)
+
   const patterns: string[] = []
 
-  if (heelSymmetry > 0.035) {
-    patterns.push("heel_asymmetry")
+  if (lateralShift < 0.25 || kneeDiff < 12) {
+    return {
+      ready: true,
+      validFrame: true,
+      repSignal: lateralShift,
+      patterns: ["return_to_center_or_step_wider"],
+      formHint: "Step wide to the side, then return fully to center.",
+      debug: { lateralShift, kneeDiff, bentKnee },
+    }
+  }
+
+  const leftKneeCave = Math.abs(leftKnee.x - leftAnkle.x) > 0.09
+  const rightKneeCave = Math.abs(rightKnee.x - rightAnkle.x) > 0.09
+
+  if (leftKneeCave || rightKneeCave) {
+    patterns.push("knee_caves_inward")
   }
 
   return {
     ready: true,
     validFrame: true,
-    repSignal: avg([leftHeelY, rightHeelY]),
+    repSignal: lateralShift,
     patterns,
-    formHint: "Rise onto your toes, hold briefly, then lower slowly.",
-    debug: { leftHeelY, rightHeelY, heelSymmetry, avgAnkle },
+    formHint: patterns.length === 0
+      ? "Good side lunge. Return to center to count the rep."
+      : "Keep the bent knee tracking over the foot.",
+    debug: { lateralShift, kneeDiff, bentKnee },
   }
 }
 
@@ -408,6 +446,38 @@ export class ThresholdRepCounter {
 
     if (this.state === "bottom" && cameUp) {
       this.state = "top"
+      this.count += 1
+    }
+
+    return this.count
+  }
+
+  get() {
+    return this.count
+  }
+}
+
+export class LateralLungeCounter {
+  private state: "center" | "side" = "center"
+  private count = 0
+
+  reset() {
+    this.state = "center"
+    this.count = 0
+  }
+
+  update(lateralShift: number, ready: boolean) {
+    if (!ready) return this.count
+
+    const isSide = lateralShift > 0.45
+    const isCenter = lateralShift < 0.20
+
+    if (this.state === "center" && isSide) {
+      this.state = "side"
+    }
+
+    if (this.state === "side" && isCenter) {
+      this.state = "center"
       this.count += 1
     }
 

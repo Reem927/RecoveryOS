@@ -14,7 +14,7 @@ import {
   createSession, advanceSession, advanceSessionSequential, MEDIAPIPE_LANDMARKS, MuscleScore,
 } from "@/lib/leg-assessment-engine"
 import { computeFrameConfidence, getFrameQualityMessage, AngleSmoother } from "@/lib/vision-fusion"
-import { validateExerciseFrame, ThresholdRepCounter, fullBodyVisible, SquatRepCounter } from "@/lib/exercise-validators"
+import { validateExerciseFrame, ThresholdRepCounter, fullBodyVisible, SquatRepCounter, LateralLungeCounter } from "@/lib/exercise-validators"
 import dynamic from "next/dynamic"
 
 const HumanModel3D = dynamic(
@@ -135,45 +135,42 @@ function lowerBodyVisible(lms: Landmark[], L: typeof MEDIAPIPE_LANDMARKS) {
   return avgVisibility(lms, needed) > 0.55
 }
 
-// ─── Calf raise counter using heel rise ────────────────────────────────
+// ─── Calf raise counter using whole-body rise ────────────────────────────────
+// When a user rises onto their toes, the entire body lifts ~3-5cm. Tracking
+// the body's average Y (midpoint of shoulders + hips) is more robust than heel
+// tracking, which can be occluded or ambiguous from a front-facing camera.
 class CalfRaiseCounter {
-  private leftBaseSamples: number[] = []
-  private rightBaseSamples: number[] = []
-  private leftBase: number | null = null
-  private rightBase: number | null = null
+  private baselineSamples: number[] = []
+  private baseline: number | null = null
   private state: "down" | "up" = "down"
   private count = 0
 
   reset() {
-    this.leftBaseSamples = []
-    this.rightBaseSamples = []
-    this.leftBase = null
-    this.rightBase = null
+    this.baselineSamples = []
+    this.baseline = null
     this.state = "down"
     this.count = 0
   }
 
-  update(leftHeelY: number, rightHeelY: number, visible: boolean) {
+  update(bodyY: number, visible: boolean) {
     if (!visible) return this.count
 
-    if (this.leftBaseSamples.length < 20) {
-      this.leftBaseSamples.push(leftHeelY)
-      this.rightBaseSamples.push(rightHeelY)
-      this.leftBase = this.leftBaseSamples.reduce((a, b) => a + b, 0) / this.leftBaseSamples.length
-      this.rightBase = this.rightBaseSamples.reduce((a, b) => a + b, 0) / this.rightBaseSamples.length
+    // First 15 frames of the exercise establish the standing baseline
+    if (this.baselineSamples.length < 15) {
+      this.baselineSamples.push(bodyY)
+      this.baseline = this.baselineSamples.reduce((a, b) => a + b, 0) / this.baselineSamples.length
       return this.count
     }
 
-    if (this.leftBase == null || this.rightBase == null) return this.count
+    if (this.baseline == null) return this.count
 
-    const leftRise = this.leftBase - leftHeelY
-    const rightRise = this.rightBase - rightHeelY
-    const avgRise = (leftRise + rightRise) / 2
+    // Y axis: 0 at top of frame, so body rising = baseline - bodyY > 0
+    const rise = this.baseline - bodyY
 
-    if (this.state === "down" && avgRise > 0.025) {
+    if (this.state === "down" && rise > 0.015) {
       this.state = "up"
     }
-    if (this.state === "up" && avgRise < 0.012) {
+    if (this.state === "up" && rise < 0.005) {
       this.state = "down"
       this.count += 1
     }
@@ -258,10 +255,11 @@ function detectPatterns(
     if (Math.abs(shoulderMid - hipMid) > 0.07) patterns.push("lateral_shift")
   }
 
-  if (exerciseId === "calf_raise") {
-    if ((angles.lAnkle + angles.rAnkle) / 2 > 78) patterns.push("limited_plantarflexion")
-    if (Math.abs(angles.lAnkle - angles.rAnkle) > 12) patterns.push("heel_asymmetry")
-    if (get(L.LEFT_FOOT_INDEX).x - get(L.LEFT_HEEL).x > 0.04) patterns.push("inward_heel_roll")
+  if (exerciseId === "lateral_lunge") {
+    const kneeDiff = Math.abs(angles.lKnee - angles.rKnee)
+    const hipShift = Math.abs(get(L.LEFT_HIP).x - get(L.RIGHT_HIP).x)
+    if (kneeDiff < 18) patterns.push("side_to_side_asymmetry")
+    if (hipShift < 0.04) patterns.push("insufficient_lateral_shift")
   }
 
   return patterns
@@ -350,11 +348,14 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     bodyweight_squat: new ThresholdRepCounter(65, 25, "increase"),
     reverse_lunge: new ThresholdRepCounter(55, 22, "increase"),
     hip_hinge: new ThresholdRepCounter(35, 12, "increase"),
-    calf_raise: new ThresholdRepCounter(0.02, 0.008, "decrease"),
+    lateral_lunge: new ThresholdRepCounter(0.055, 0.025, "increase"),
   })
 
   // Squat-specific counter
   const squatCounter = useRef(new SquatRepCounter())
+
+  // Lateral lunge-specific counter
+  const lateralLungeCounter = useRef(new LateralLungeCounter())
 
   // Balance hold timer refs
   const validHoldSecondsRef = useRef(0)
@@ -460,8 +461,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
 
     const rawPatterns = detectPatterns(exerciseId, lms, { lKnee, rKnee, lHip, rHip, lAnkle, rAnkle })
 
-    // Skip low-confidence frames
-    if (frameConfidence < 70) {
+    // Skip low-confidence frames only for exercises that need calibration
+    const needsCalibration = exerciseId !== "lateral_lunge"
+    if (needsCalibration && frameConfidence < 70) {
       setMetrics(prev => ({
         ...prev,
         formHint: getFrameQualityMessage(frameConfidence, hasLowerBody),
@@ -554,8 +556,11 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       reps = repCountersRef.current.reverse_lunge.update(validation.repSignal)
     } else if (exerciseId === "hip_hinge") {
       reps = repCountersRef.current.hip_hinge.update(validation.repSignal)
-    } else if (exerciseId === "calf_raise") {
-      reps = repCountersRef.current.calf_raise.update(validation.repSignal)
+    } else if (exerciseId === "lateral_lunge") {
+      reps = lateralLungeCounter.current.update(
+        validation.debug.lateralShift as number,
+        validation.ready && validation.validFrame
+      )
     }
 
     smoother.current.push(validation.patterns)
@@ -802,6 +807,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     angleSmoother.current.reset()
     calfCounter.current.reset()
     squatCounter.current.reset()
+    lateralLungeCounter.current.reset()
     Object.values(repCountersRef.current).forEach(counter => counter.reset())
     validHoldSecondsRef.current = 0
     lastHoldTickRef.current = null
@@ -1140,9 +1146,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
                 { label: "Knee · Right", v: metrics.kneeFlexionR, ideal: 90 },
                 { label: "Hip · Left",   v: metrics.hipFlexionL,  ideal: 90 },
                 { label: "Hip · Right",  v: metrics.hipFlexionR,  ideal: 90 },
-                ...(session.currentExercise === "calf_raise" ? [
-                  { label: "Ankle · Left",  v: metrics.ankleFlexionL, ideal: 65 },
-                  { label: "Ankle · Right", v: metrics.ankleFlexionR, ideal: 65 },
+                ...(session.currentExercise === "lateral_lunge" ? [
+                  { label: "Ankle · Left",  v: metrics.ankleFlexionL, ideal: 90 },
+                  { label: "Ankle · Right", v: metrics.ankleFlexionR, ideal: 90 },
                 ] : []),
               ].map(j => {
                 const diff  = Math.abs(j.v - j.ideal)

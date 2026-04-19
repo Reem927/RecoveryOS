@@ -33,7 +33,7 @@ const BL = {
   upperArm: 0.28, forearm: 0.24, neck: 0.13, headR: 0.17,
 }
 
-type ExId = "bodyweight_squat"|"reverse_lunge"|"single_leg_balance"|"hip_hinge"|"calf_raise"
+type ExId = "bodyweight_squat"|"reverse_lunge"|"single_leg_balance"|"hip_hinge"|"lateral_lunge"
 
 interface PF {
   lHipFlex: number
@@ -68,10 +68,10 @@ const POSES: Record<ExId, { s: PF; p: PF; spd: number }> = {
     p: { lHipFlex: 0.25, rHipFlex: 0.25, lKneeFlex: 0.18, rKneeFlex: 0.18, trunkFlex: 0.85, heelRise: 0, pelvisDrop: 0.04, lArm: -0.15, rArm: -0.15 },
     spd: 0.7,
   },
-  calf_raise: {
-    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
-    p: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0.17, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
-    spd: 1.0,
+  lateral_lunge: {
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.12, rArm: 0.12 },
+    p: { lHipFlex: 0.45, rHipFlex: 0.08, lKneeFlex: 0.9, rKneeFlex: 0.12, trunkFlex: 0.18, heelRise: 0, pelvisDrop: 0.12, lArm: 0.35, rArm: 0.35 },
+    spd: 0.7,
   },
 }
 

@@ -56,7 +56,7 @@ export type ExerciseId =
   | "reverse_lunge"
   | "single_leg_balance"
   | "hip_hinge"
-  | "calf_raise"
+  | "lateral_lunge"
 
 export interface Exercise {
   id: ExerciseId
@@ -235,36 +235,23 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
     ],
   },
 
-  calf_raise: {
-    id: "calf_raise",
-    name: "Double Calf Raise",
+  lateral_lunge: {
+    id: "lateral_lunge",
+    name: "Lateral Lunge",
     duration: 45,
     reps: 5,
     completionMode: "reps",
-    description: "Feet hip-width, rise onto toes as high as possible, lower slowly.",
-    clientCue: "Rise up onto your tiptoes as high as you can, hold briefly, then slowly lower. Complete 5 reps.",
-    targetMuscles: ["calves", "adductors"],
+    description: "Step to the side, bend one knee, keep the other leg long, then return to center.",
+    clientCue: "Complete 5 slow side lunges. Step wide, bend one knee, keep the opposite leg long, then return to center.",
+    targetMuscles: ["quadriceps", "glutes", "hamstrings", "adductors"],
     keyAngles: [
-      { joint: "plantarflexion",        idealMin: 35,  idealMax: 50,  asymmetryThreshold: 8  },
-      { joint: "heel_rise_symmetry",    idealMin: -3,  idealMax: 3,   asymmetryThreshold: 6  },
-      { joint: "ankle_inversion",       idealMin: -5,  idealMax: 5,   asymmetryThreshold: 8  },
+      { joint: "knee", idealMin: 90, idealMax: 140, asymmetryThreshold: 15 },
+      { joint: "hip", idealMin: 70, idealMax: 130, asymmetryThreshold: 15 },
     ],
     dysfunctionMap: [
-      {
-        pattern: "limited_plantarflexion",
-        impliedMuscles: ["gastrocnemius", "soleus"],
-        severity: "high",
-      },
-      {
-        pattern: "heel_asymmetry",
-        impliedMuscles: ["gastrocnemius", "peroneus_longus", "tibialis_anterior"],
-        severity: "medium",
-      },
-      {
-        pattern: "inward_heel_roll",
-        impliedMuscles: ["peroneus_longus", "gracilis", "adductor_longus"],
-        severity: "medium",
-      },
+      { pattern: "insufficient_lateral_shift", impliedMuscles: ["glutes", "adductors"], severity: "medium" },
+      { pattern: "knee_caves_inward", impliedMuscles: ["glutes", "quadriceps"], severity: "high" },
+      { pattern: "side_to_side_asymmetry", impliedMuscles: ["glutes", "adductors"], severity: "medium" },
     ],
   },
 }
@@ -337,22 +324,22 @@ export const DECISION_TREE: Record<ExerciseId, DecisionNode> = {
       )
       const isGood = perf.movementQuality >= 75 && perf.symmetry >= 75
 
-      if (isGood) return "calf_raise"
+      if (isGood) return "lateral_lunge"
       if (hasHipFlexorPattern) return "hip_hinge"
       if (hasGlutePattern) return "single_leg_balance"
-      return "calf_raise"
+      return "lateral_lunge"
     },
   },
   single_leg_balance: {
     exerciseId: "single_leg_balance",
-    next: () => "calf_raise",
+    next: () => "lateral_lunge",
   },
   hip_hinge: {
     exerciseId: "hip_hinge",
-    next: () => "calf_raise",
+    next: () => "lateral_lunge",
   },
-  calf_raise: {
-    exerciseId: "calf_raise",
+  lateral_lunge: {
+    exerciseId: "lateral_lunge",
     next: () => null, // assessment complete
   },
 }
@@ -471,7 +458,7 @@ export const EXERCISE_ORDER: ExerciseId[] = [
   "reverse_lunge",
   "single_leg_balance",
   "hip_hinge",
-  "calf_raise",
+  "lateral_lunge",
 ]
 
 export function getSequentialNextExercise(current: ExerciseId): ExerciseId | null {
