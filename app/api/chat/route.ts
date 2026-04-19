@@ -56,11 +56,24 @@ export async function POST(req: NextRequest) {
     sessionId?: string
   } = body
 
-  if (!clientId || !message || !senderRole) {
+  if (!message || !senderRole) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
   }
 
   const supabase = createAdminSupabaseClient()
+
+  // General practitioner mode (no clientId) — no history or DB storage
+  if (!clientId) {
+    const systemPrompt = buildSystemPrompt(senderRole, null, null)
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 500,
+      system: systemPrompt,
+      messages: [{ role: "user", content: `[${senderRole}]: ${message}` }],
+    })
+    const reply = response.content[0].type === "text" ? response.content[0].text : ""
+    return NextResponse.json({ reply })
+  }
 
   // Fetch last 12 chat messages for history
   const { data: history } = await supabase

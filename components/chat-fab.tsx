@@ -11,8 +11,8 @@ interface Message {
 }
 
 interface ChatFABProps {
-  patientId: string
-  patientName: string
+  patientId?: string
+  patientName?: string
   senderRole: "practitioner" | "client"
   assessmentId?: string
 }
@@ -32,9 +32,9 @@ export function ChatFAB({ patientId, patientName, senderRole, assessmentId }: Ch
     }
   }, [messages, loading])
 
-  // Load chat history on open
+  // Load chat history on open (only when a specific patient is provided)
   useEffect(() => {
-    if (!open || messages.length > 0) return
+    if (!open || messages.length > 0 || !patientId) return
     fetch(`/api/chat/history?clientId=${patientId}`)
       .then((r) => r.json())
       .then((data: Array<{ sender_role: string; content: string; created_at: string }>) => {
@@ -65,7 +65,7 @@ export function ChatFAB({ patientId, patientName, senderRole, assessmentId }: Ch
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: patientId,
+          ...(patientId ? { clientId: patientId } : {}),
           message: text,
           senderRole,
           assessmentId,
@@ -102,7 +102,7 @@ export function ChatFAB({ patientId, patientName, senderRole, assessmentId }: Ch
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold text-white">Recovery Assistant</p>
-              <p className="text-[11px] text-white/40 truncate">{patientName}</p>
+              <p className="text-[11px] text-white/40 truncate">{patientName ?? "General Assistant"}</p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -121,7 +121,9 @@ export function ChatFAB({ patientId, patientName, senderRole, assessmentId }: Ch
               <p className="text-center text-[12px] text-[#9CA3AF] pt-6">
                 {senderRole === "client"
                   ? "Hi! Ask me anything about your recovery journey."
-                  : `Ask me anything about ${patientName}'s recovery.`}
+                  : patientName
+                  ? `Ask me anything about ${patientName}'s recovery.`
+                  : "Ask me anything about recovery, protocols, or wellness."}
               </p>
             )}
             {messages.map((m, i) => (
