@@ -42,11 +42,15 @@ export function computeFrameConfidence(args: FrameQualityArgs): number {
   return Math.max(0, Math.min(100, score))
 }
 
-export function getFrameQualityMessage(confidence: number, lowerBodyVisible: boolean): string {
-  if (confidence < 50) return "Step back so your full body is visible"
-  if (confidence < 70) return "Hold still — calibrating"
-  if (!lowerBodyVisible) return "Keep both legs in frame"
-  return "Great form — keep going!"
+export function getFrameQualityMessage(
+  confidence: number,
+  lowerBodyVisible: boolean,
+  exerciseHint?: string
+): string {
+  if (!lowerBodyVisible) return "Step back so your hips, knees, ankles, and feet are visible."
+  if (confidence < 50) return "Step back so your full body is visible."
+  if (confidence < 70) return exerciseHint || "Keep your body centered in frame."
+  return exerciseHint || "Great form — keep going!"
 }
 
 export class AngleSmoother {

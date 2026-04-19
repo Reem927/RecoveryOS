@@ -47,6 +47,7 @@ interface LiveMetrics {
   detectedPatterns: string[]
   repCount: number
   formHint: string
+  validationDebug?: Record<string, number | string | boolean>
 }
 
 // ─── Fix 2: Temporal pattern smoother ────────────────────────────────────────
@@ -326,7 +327,7 @@ export type ScanMode = "practitioner" | "client"
 
 interface Props {
   mode?: ScanMode
-  onComplete?: (muscleScores: MuscleScore[], session: AssessmentSession) => void
+  onComplete?: (muscleScores: MuscleScore[], session: AssessmentSession, videoBlob?: Blob | null) => void | Promise<void>
 }
 
 export default function LegAssessmentScan({ mode = "practitioner", onComplete }: Props) {
@@ -335,6 +336,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   const poseRef    = useRef<any>(null)
   const cameraRef  = useRef<any>(null)
   const sessionRef = useRef<AssessmentSession>(createSession())
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const videoStreamRef = useRef<MediaStream | null>(null)
 
   const smoother   = useRef(new TemporalSmoother())
   const repCounter = useRef(new RepCounter())
@@ -466,7 +470,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     if (needsCalibration && frameConfidence < 70) {
       setMetrics(prev => ({
         ...prev,
-        formHint: getFrameQualityMessage(frameConfidence, hasLowerBody),
+        formHint: getFrameQualityMessage(frameConfidence, hasLowerBody, "Hold still — calibrating"),
         movementQuality: Math.round(prev.movementQuality * 0.95),
       }))
       return
@@ -558,7 +562,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       reps = repCountersRef.current.hip_hinge.update(validation.repSignal)
     } else if (exerciseId === "lateral_lunge") {
       reps = lateralLungeCounter.current.update(
-        validation.debug.lateralShift as number,
+        validation.repSignal,
         validation.ready && validation.validFrame
       )
     }
@@ -584,6 +588,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       detectedPatterns: validation.patterns.length > 0 ? validation.patterns : confirmedPatterns,
       repCount: reps,
       formHint: validation.formHint,
+      validationDebug: validation.debug,
     }
 
     metricsBuf.current.push(m)
@@ -733,7 +738,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   }, [processLandmarks, drawSkeleton])
 
   // ── Exercise flow ──────────────────────────────────────────────────────────
-  const finishExercise = useCallback(() => {
+  const finishExercise = useCallback(async () => {
     const finishingExerciseId = activeExerciseRef.current
     if (!finishingExerciseId) return
     if (isFinishingRef.current) return
@@ -774,9 +779,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       timestamp: Date.now(),
     }
 
-    const newSession = mode === "client"
-      ? advanceSessionSequential(sessionRef.current, perf)
-      : advanceSession(sessionRef.current, perf)
+    const newSession = advanceSession(sessionRef.current, perf)
 
     sessionRef.current = newSession
     setSession(newSession)
@@ -784,11 +787,24 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     resetTrackers()
 
     if (newSession.isComplete) {
+      // Stop recording and get video blob
+      const videoBlob = await stopVideoRecording()
+
+      // Prepare scan data for save
+      const scanData = {
+        patientId: "demo-patient-id", // Would come from auth in prod
+        practitionerId: "demo-practitioner-id",
+        performances: newSession.performances,
+        muscleScores: newSession.muscleScores,
+        completedExercises: newSession.completedExercises,
+      }
+
+      // Pass everything to the page handler - video blob will be uploaded separately
       const handler = (window as any).__handleComplete
       if (handler) {
-        handler(newSession.muscleScores, newSession)
+        handler(newSession.muscleScores, newSession, videoBlob)
       } else {
-        onComplete?.(newSession.muscleScores, newSession)
+        onComplete?.(newSession.muscleScores, newSession, videoBlob)
       }
     } else {
       setShowGuide(true)
@@ -813,6 +829,37 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     lastHoldTickRef.current = null
   }, [])
 
+  const startVideoRecording = useCallback(() => {
+    if (!videoRef.current) return
+    const stream = (videoRef.current as HTMLVideoElement & { captureStream?: (fps: number) => MediaStream }).captureStream?.(30)
+    if (!stream) return
+    videoStreamRef.current = stream
+    recordedChunksRef.current = []
+    const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" })
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data)
+      }
+    }
+    mediaRecorder.start(1000)
+    mediaRecorderRef.current = mediaRecorder
+  }, [])
+
+  const stopVideoRecording = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        resolve(null)
+        return
+      }
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" })
+        resolve(blob)
+      }
+      mediaRecorderRef.current.stop()
+      videoStreamRef.current?.getTracks().forEach(track => track.stop())
+    })
+  }, [])
+
   const startExercise = useCallback(() => {
     if (isRunningRef.current || isFinishingRef.current) return
 
@@ -826,6 +873,8 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     setShowGuide(false)
     setIsRunning(true)
     setExerciseTimer(exercise.duration)
+
+    startVideoRecording()
 
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -916,6 +965,14 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
                   <div>Reps: {metrics.repCount}</div>
                   <div>Timer: {exerciseTimer}s</div>
                   <div>Patterns: {metrics.detectedPatterns.join(", ") || "none"}</div>
+                  {session.currentExercise === "lateral_lunge" && (
+                    <>
+                      <div>Signal: {Math.round(Number(metrics.validationDebug?.repSignal || 0))}</div>
+                      <div>Bent knee: {String(metrics.validationDebug?.bentKnee || "-")}</div>
+                      <div>Knee diff: {String(metrics.validationDebug?.kneeDiff || "-")}</div>
+                      <div>Foot width: {typeof metrics.validationDebug?.footWidth === "number" ? metrics.validationDebug.footWidth.toFixed(3) : "-"}</div>
+                    </>
+                  )}
                 </div>
               )}
 

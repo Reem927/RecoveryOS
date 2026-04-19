@@ -366,51 +366,79 @@ function validateLateralLunge(lms: Landmark[], angles: any): ExerciseValidation 
     }
   }
 
-  const leftHip = p(lms, L.LEFT_HIP)
-  const rightHip = p(lms, L.RIGHT_HIP)
   const leftKnee = p(lms, L.LEFT_KNEE)
   const rightKnee = p(lms, L.RIGHT_KNEE)
   const leftAnkle = p(lms, L.LEFT_ANKLE)
   const rightAnkle = p(lms, L.RIGHT_ANKLE)
-
-  const hipCenterX = (leftHip.x + rightHip.x) / 2
-  const ankleCenterX = (leftAnkle.x + rightAnkle.x) / 2
-
-  const ankleWidth = Math.max(Math.abs(leftAnkle.x - rightAnkle.x), 0.05)
-  const lateralShift = Math.abs(hipCenterX - ankleCenterX) / ankleWidth
+  const leftFoot = p(lms, L.LEFT_FOOT_INDEX)
+  const rightFoot = p(lms, L.RIGHT_FOOT_INDEX)
 
   const kneeDiff = Math.abs(angles.kneeL - angles.kneeR)
   const bentKnee = Math.min(angles.kneeL, angles.kneeR)
+  const straightKnee = Math.max(angles.kneeL, angles.kneeR)
+
+  const footWidth = Math.abs(leftFoot.x - rightFoot.x)
+
+  const lungeDepthSignal = Math.max(0, 170 - bentKnee)
+  const asymmetrySignal = kneeDiff
+
+  const repSignal = lungeDepthSignal + asymmetrySignal * 0.45
 
   const patterns: string[] = []
 
-  if (lateralShift < 0.25 || kneeDiff < 12) {
+  const inSideLunge =
+    footWidth > 0.16 &&
+    bentKnee < 145 &&
+    straightKnee > 145 &&
+    kneeDiff > 18
+
+  if (!inSideLunge) {
     return {
       ready: true,
       validFrame: true,
-      repSignal: lateralShift,
+      repSignal,
       patterns: ["return_to_center_or_step_wider"],
-      formHint: "Step wide to the side, then return fully to center.",
-      debug: { lateralShift, kneeDiff, bentKnee },
+      formHint: "Step wide, bend one knee, and keep the opposite leg long.",
+      debug: {
+        footWidth,
+        kneeDiff,
+        bentKnee,
+        straightKnee,
+        repSignal,
+        inSideLunge: false,
+      },
     }
   }
 
-  const leftKneeCave = Math.abs(leftKnee.x - leftAnkle.x) > 0.09
-  const rightKneeCave = Math.abs(rightKnee.x - rightAnkle.x) > 0.09
+  const bentSide = angles.kneeL < angles.kneeR ? "left" : "right"
 
-  if (leftKneeCave || rightKneeCave) {
+  const kneeCave =
+    bentSide === "left"
+      ? Math.abs(leftKnee.x - leftAnkle.x) > 0.1
+      : Math.abs(rightKnee.x - rightAnkle.x) > 0.1
+
+  if (kneeCave) {
     patterns.push("knee_caves_inward")
   }
 
   return {
     ready: true,
     validFrame: true,
-    repSignal: lateralShift,
+    repSignal,
     patterns,
-    formHint: patterns.length === 0
-      ? "Good side lunge. Return to center to count the rep."
-      : "Keep the bent knee tracking over the foot.",
-    debug: { lateralShift, kneeDiff, bentKnee },
+    formHint:
+      patterns.length === 0
+        ? "Good side lunge. Return to center to count the rep."
+        : "Keep the bent knee tracking over the foot.",
+    debug: {
+      footWidth,
+      kneeDiff,
+      bentKnee,
+      straightKnee,
+      repSignal,
+      bentSide,
+      inSideLunge: true,
+    },
   }
 }
 
@@ -466,11 +494,11 @@ export class LateralLungeCounter {
     this.count = 0
   }
 
-  update(lateralShift: number, ready: boolean) {
+  update(repSignal: number, ready: boolean) {
     if (!ready) return this.count
 
-    const isSide = lateralShift > 0.45
-    const isCenter = lateralShift < 0.20
+    const isSide = repSignal > 45
+    const isCenter = repSignal < 18
 
     if (this.state === "center" && isSide) {
       this.state = "side"

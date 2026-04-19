@@ -15,12 +15,29 @@ export default function ClientScanPage() {
   const [complete, setComplete] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  async function handleComplete(scores: MuscleScore[], session: AssessmentSession) {
+  async function handleComplete(scores: MuscleScore[], session: AssessmentSession, videoBlob?: Blob | null) {
     setComplete(true)
+
+    let videoUrl: string | null = null
 
     if (!patientId) {
       setSaveError("No patient ID in URL (add ?patient=<uuid>). Results not saved.")
       return
+    }
+
+    // Upload video if recorded
+    if (videoBlob) {
+      const fileName = `scan-${patientId}-${Date.now()}.webm`
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("cv-scan-videos")
+        .upload(fileName, videoBlob, { contentType: "video/webm" })
+
+      if (uploadError) {
+        setSaveError("Video upload failed: " + uploadError.message)
+      } else {
+        const { data: urlData } = supabase.storage.from("cv-scan-videos").getPublicUrl(fileName)
+        videoUrl = urlData.publicUrl
+      }
     }
 
     const { error } = await supabase.from("cv_scans").insert({
@@ -30,6 +47,7 @@ export default function ClientScanPage() {
       metrics: {
         muscleScores: scores,
         completedExercises: session.completedExercises,
+        videoUrl: videoUrl,
       },
     })
 

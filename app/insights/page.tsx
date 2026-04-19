@@ -14,6 +14,7 @@ import {
   Info,
   Play,
   Sparkles,
+  Video,
   Waves,
   Wind,
   Zap,
@@ -21,6 +22,30 @@ import {
 import { AppShell } from "@/components/hydrawav3/app-shell"
 import { AssessmentStepper, type Step } from "@/components/hydrawav3/assessment-stepper"
 import type { MuscleScore } from "@/lib/leg-assessment-engine"
+import { supabase } from "@/lib/supabase"
+import { useSearchParams } from "next/navigation"
+
+const searchParams = useSearchParams()
+const scanId = searchParams.get("scan")
+
+const [videoUrl, setVideoUrl] = useState<string | null>(null)
+const [showVideo, setShowVideo] = useState(false)
+
+useEffect(() => {
+  async function fetchVideoUrl() {
+    if (!scanId) return
+    const { data } = await supabase
+      .from("cv_scans")
+      .select("metrics")
+      .eq("id", scanId)
+      .single()
+    const metrics = data?.metrics as Record<string, unknown> | undefined
+    if (metrics?.videoUrl) {
+      setVideoUrl(metrics.videoUrl as string)
+    }
+  }
+  fetchVideoUrl()
+}, [scanId])
 
 const steps: Step[] = [
   { label: "Consent", status: "done", meta: "09:02" },
@@ -423,6 +448,30 @@ export default function InsightsPage() {
                 </div>
               </div>
             </div>
+            {videoUrl ? (
+            <div className="rounded-[12px] border border-black/[0.07] bg-white p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Video className="h-4 w-4 text-[#C97A56]" />
+                  <span className="text-[13px] font-semibold text-[#1F2937]">Session recording</span>
+                </div>
+                <button
+                  onClick={() => setShowVideo(!showVideo)}
+                  className="text-[12px] font-medium text-[#C97A56]"
+                >
+                  {showVideo ? "Hide" : "Play"}
+                </button>
+              </div>
+              {showVideo && (
+                <video
+                  src={videoUrl}
+                  controls
+                  className="aspect-video w-full rounded-[8px] bg-black"
+                />
+              )}
+            </div>
+          ) : null}
+
             <div className="flex items-center gap-2 rounded-[10px] bg-[#1A7A45] px-4 py-3 text-[12px] font-medium text-white">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15">
                 <CheckCircle2 className="h-3 w-3" />
