@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, AlertTriangle } from "lucide-react"
 import LegAssessmentScan from "@/components/hydrawav3/LegAssessmentScan"
 import type { MuscleScore, AssessmentSession } from "@/lib/leg-assessment-engine"
 import { supabase } from "@/lib/supabase"
 
-export default function ClientScanPage() {
+function ClientScanContent() {
   const searchParams = useSearchParams()
   const patientId = searchParams.get("patient")
   const sessionId = searchParams.get("session")
@@ -25,7 +25,6 @@ export default function ClientScanPage() {
       return
     }
 
-    // Upload video if recorded
     if (videoBlob) {
       const fileName = `scan-${patientId}-${Date.now()}.webm`
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -77,4 +76,12 @@ export default function ClientScanPage() {
   }
 
   return <LegAssessmentScan mode="client" onComplete={handleComplete} />
+}
+
+export default function ClientScanPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#0B1820] text-white">Loading...</div>}>
+      <ClientScanContent />
+    </Suspense>
+  )
 }
