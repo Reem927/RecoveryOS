@@ -63,6 +63,7 @@ export interface Exercise {
   name: string
   duration: number        // seconds
   reps: number
+  completionMode: "reps" | "time"
   description: string
   clientCue: string       // what the client sees
   targetMuscles: MuscleGroup[]
@@ -85,10 +86,11 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
   bodyweight_squat: {
     id: "bodyweight_squat",
     name: "Bodyweight Squat",
-    duration: 20,
+    duration: 45,
     reps: 5,
+    completionMode: "reps",
     description: "Feet shoulder-width, descend until thighs parallel, return to stand",
-    clientCue: "Stand with feet shoulder-width apart. Lower yourself like sitting in a chair, keeping chest tall. Return to standing.",
+    clientCue: "Complete 5 slow, controlled squats. Keep your chest tall and knees over your toes.",
     targetMuscles: ["quadriceps", "glutes", "hamstrings", "calves"],
     keyAngles: [
       { joint: "knee_flexion",  idealMin: 80,  idealMax: 100, asymmetryThreshold: 8  },
@@ -122,10 +124,11 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
   reverse_lunge: {
     id: "reverse_lunge",
     name: "Reverse Lunge",
-    duration: 25,
+    duration: 60,
     reps: 5,
+    completionMode: "reps",
     description: "Step backward, lower rear knee toward floor, return. Alternate legs.",
-    clientCue: "Step one foot back and lower your back knee toward the floor. Keep your front knee over your ankle. Return and switch sides.",
+    clientCue: "Step one foot back and lower your back knee toward the floor. Keep your front knee over your ankle. Complete 5 reps.",
     targetMuscles: ["quadriceps", "glutes", "hamstrings", "hip_flexors"],
     keyAngles: [
       { joint: "front_knee_flexion",  idealMin: 85,  idealMax: 95,  asymmetryThreshold: 7  },
@@ -159,10 +162,11 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
   single_leg_balance: {
     id: "single_leg_balance",
     name: "Single-Leg Balance",
-    duration: 30,
-    reps: 1,
-    description: "Stand on one leg for 10 seconds, arms at sides. Repeat both sides.",
-    clientCue: "Lift one foot slightly off the floor and hold still for 10 seconds. Keep your hips level. Switch sides.",
+    duration: 20,
+    reps: 0,
+    completionMode: "time",
+    description: "Stand on one leg for 20 seconds. Repeat both sides.",
+    clientCue: "Stand on one leg and hold for 20 seconds. Keep your hips level and arms at your sides.",
     targetMuscles: ["glutes", "calves", "it_band", "adductors"],
     keyAngles: [
       { joint: "hip_abduction_level",   idealMin: -3, idealMax: 3,  asymmetryThreshold: 5  },
@@ -196,10 +200,11 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
   hip_hinge: {
     id: "hip_hinge",
     name: "Hip Hinge (Deadlift Pattern)",
-    duration: 20,
+    duration: 45,
     reps: 5,
+    completionMode: "reps",
     description: "Feet hip-width, hinge at hips pushing them back, lower torso to 45°, return.",
-    clientCue: "Stand tall, push your hips back like closing a drawer with your hips. Keep your back flat and lower your chest toward the floor. Return to standing by driving hips forward.",
+    clientCue: "Push your hips back like closing a drawer. Keep your back flat and lower your chest toward your knees. Complete 5 reps.",
     targetMuscles: ["hamstrings", "glutes", "calves"],
     keyAngles: [
       { joint: "hip_flexion_hinge",     idealMin: 40,  idealMax: 60,  asymmetryThreshold: 8  },
@@ -233,10 +238,11 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
   calf_raise: {
     id: "calf_raise",
     name: "Double Calf Raise",
-    duration: 20,
-    reps: 10,
+    duration: 45,
+    reps: 5,
+    completionMode: "reps",
     description: "Feet hip-width, rise onto toes as high as possible, lower slowly.",
-    clientCue: "Stand with feet hip-width apart. Rise up onto your tiptoes as high as you can, hold for a moment, then slowly lower back down.",
+    clientCue: "Rise up onto your tiptoes as high as you can, hold briefly, then slowly lower. Complete 5 reps.",
     targetMuscles: ["calves", "adductors"],
     keyAngles: [
       { joint: "plantarflexion",        idealMin: 35,  idealMax: 50,  asymmetryThreshold: 8  },

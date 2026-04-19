@@ -166,7 +166,7 @@ export default function ClientDashboard() {
               Trending up
             </span>
           </div>
-          <RecoveryTrendChart />
+          <RecoveryTrendChart data={[]} />
         </div>
 
         {/* Timeline */}

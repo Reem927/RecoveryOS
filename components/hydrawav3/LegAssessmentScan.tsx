@@ -8,10 +8,12 @@ import {
 } from "lucide-react"
 import {
   EXERCISES,
+  EXERCISE_ORDER,
   ExercisePerformance, AssessmentSession, ExerciseId,
   angleBetweenPoints, computeSymmetryScore,
   createSession, advanceSession, advanceSessionSequential, MEDIAPIPE_LANDMARKS, MuscleScore,
 } from "@/lib/leg-assessment-engine"
+import { computeFrameConfidence, getFrameQualityMessage, AngleSmoother } from "@/lib/vision-fusion"
 import dynamic from "next/dynamic"
 
 const HumanModel3D = dynamic(
@@ -111,6 +113,75 @@ class RepCounter {
   get() { return this.count }
 }
 
+// ─── Lower body visibility helpers ───────────────────────────────
+function visibilityOf(point: any) {
+  return point?.visibility ?? point?.presence ?? 1
+}
+
+function avgVisibility(lms: Landmark[], indexes: number[]) {
+  const values = indexes.map(i => visibilityOf(lms[i] ?? {}))
+  return values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1)
+}
+
+function lowerBodyVisible(lms: Landmark[], L: typeof MEDIAPIPE_LANDMARKS) {
+  const needed = [
+    L.LEFT_HIP, L.RIGHT_HIP,
+    L.LEFT_KNEE, L.RIGHT_KNEE,
+    L.LEFT_ANKLE, L.RIGHT_ANKLE,
+    L.LEFT_HEEL, L.RIGHT_HEEL,
+    L.LEFT_FOOT_INDEX, L.RIGHT_FOOT_INDEX,
+  ]
+  return avgVisibility(lms, needed) > 0.55
+}
+
+// ─── Calf raise counter using heel rise ────────────────────────────────
+class CalfRaiseCounter {
+  private leftBaseSamples: number[] = []
+  private rightBaseSamples: number[] = []
+  private leftBase: number | null = null
+  private rightBase: number | null = null
+  private state: "down" | "up" = "down"
+  private count = 0
+
+  reset() {
+    this.leftBaseSamples = []
+    this.rightBaseSamples = []
+    this.leftBase = null
+    this.rightBase = null
+    this.state = "down"
+    this.count = 0
+  }
+
+  update(leftHeelY: number, rightHeelY: number, visible: boolean) {
+    if (!visible) return this.count
+
+    if (this.leftBaseSamples.length < 20) {
+      this.leftBaseSamples.push(leftHeelY)
+      this.rightBaseSamples.push(rightHeelY)
+      this.leftBase = this.leftBaseSamples.reduce((a, b) => a + b, 0) / this.leftBaseSamples.length
+      this.rightBase = this.rightBaseSamples.reduce((a, b) => a + b, 0) / this.rightBaseSamples.length
+      return this.count
+    }
+
+    if (this.leftBase == null || this.rightBase == null) return this.count
+
+    const leftRise = this.leftBase - leftHeelY
+    const rightRise = this.rightBase - rightHeelY
+    const avgRise = (leftRise + rightRise) / 2
+
+    if (this.state === "down" && avgRise > 0.025) {
+      this.state = "up"
+    }
+    if (this.state === "up" && avgRise < 0.012) {
+      this.state = "down"
+      this.count += 1
+    }
+    return this.count
+  }
+
+  get() { return this.count }
+}
+
 // ─── Fix 1: Full pattern detection for all 5 exercises ───────────────────────
 function detectPatterns(
   exerciseId: ExerciseId,
@@ -120,6 +191,12 @@ function detectPatterns(
   const L = MEDIAPIPE_LANDMARKS
   const get = (i: number) => lms[i] ?? { x: 0.5, y: 0.5, z: 0 }
   const patterns: string[] = []
+
+  // Check lower body visibility for exercises that need legs
+  if (!lowerBodyVisible(lms, L)) {
+    patterns.push("lower_body_not_visible")
+    return patterns
+  }
 
   const hipW  = Math.abs(get(L.LEFT_HIP).x  - get(L.RIGHT_HIP).x)
   const kneeW = Math.abs(get(L.LEFT_KNEE).x - get(L.RIGHT_KNEE).x)
@@ -141,12 +218,32 @@ function detectPatterns(
   }
 
   if (exerciseId === "single_leg_balance") {
-    if (Math.abs(get(L.LEFT_HIP).y - get(L.RIGHT_HIP).y) > 0.04) patterns.push("trendelenburg_sign")
-    if (Math.abs(get(L.LEFT_ANKLE).x - 0.5) > 0.09) patterns.push("excessive_ankle_sway")
-    if (Math.abs(get(L.LEFT_KNEE).x - get(L.LEFT_ANKLE).x) > 0.055) patterns.push("knee_wobble_medial")
+    const leftFootY = (get(L.LEFT_ANKLE).y + get(L.LEFT_HEEL).y + get(L.LEFT_FOOT_INDEX).y) / 3
+    const rightFootY = (get(L.RIGHT_ANKLE).y + get(L.RIGHT_HEEL).y + get(L.RIGHT_FOOT_INDEX).y) / 3
+    const footLiftDelta = Math.abs(leftFootY - rightFootY)
+    const leftIsLifted = leftFootY < rightFootY
+
+    if (footLiftDelta < 0.035) {
+      patterns.push("both_feet_down")
+    }
+
+    if (Math.abs(get(L.LEFT_HIP).y - get(L.RIGHT_HIP).y) > 0.04) {
+      patterns.push("trendelenburg_sign")
+    }
+
+    const supportAnkleX = leftIsLifted ? get(L.RIGHT_ANKLE).x : get(L.LEFT_ANKLE).x
+    const supportKneeX = leftIsLifted ? get(L.RIGHT_KNEE).x : get(L.LEFT_KNEE).x
+
+    if (Math.abs(supportKneeX - supportAnkleX) > 0.06) {
+      patterns.push("knee_wobble_medial")
+    }
+
     const shoulderMid = (get(L.LEFT_SHOULDER).x + get(L.RIGHT_SHOULDER).x) / 2
-    const ankleMid    = (get(L.LEFT_ANKLE).x + get(L.RIGHT_ANKLE).x) / 2
-    if (Math.abs(shoulderMid - ankleMid) > 0.08) patterns.push("it_band_tightness")
+    const supportHipX = leftIsLifted ? get(L.RIGHT_HIP).x : get(L.LEFT_HIP).x
+
+    if (Math.abs(shoulderMid - supportHipX) > 0.08) {
+      patterns.push("it_band_tightness")
+    }
   }
 
   if (exerciseId === "hip_hinge") {
@@ -172,6 +269,8 @@ function detectPatterns(
 // ─── Form hint ────────────────────────────────────────────────────────────────
 const HINTS: Record<string, string> = { // eslint-disable-line @typescript-eslint/no-explicit-any
   "": "",
+  lower_body_not_visible: "Step back — keep hips, knees, ankles, and feet visible",
+  both_feet_down: "Lift one foot slightly off the floor",
   knees_cave_inward:      "Push knees outward over toes",
   insufficient_depth:     "Lower a little deeper",
   forward_lean_excessive: "Chest up — stay tall",
@@ -242,6 +341,12 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   const repCounter = useRef(new RepCounter())
   const smoothness = useRef(new SmoothnessTracker())
   const metricsBuf = useRef<LiveMetrics[]>([])
+  const angleSmoother = useRef(new AngleSmoother(8))
+  const calfCounter = useRef(new CalfRaiseCounter())
+
+  const isRunningRef = useRef(false)
+  const isFinishingRef = useRef(false)
+  const activeExerciseRef = useRef<ExerciseId | null>(null)
 
   const [session, setSession]             = useState<AssessmentSession>(createSession())
   const [isRunning, setIsRunning]         = useState(false)
@@ -256,6 +361,20 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     ankleFlexionL: 90, ankleFlexionR: 90,
     detectedPatterns: [], repCount: 0, formHint: "",
   })
+
+  // Sync isRunningRef with isRunning state
+  useEffect(() => {
+    isRunningRef.current = isRunning
+  }, [isRunning])
+
+  // Auto-finish when rep target is reached
+  useEffect(() => {
+    if (!isRunning) return
+    const exercise = EXERCISES[session.currentExercise]
+    if (exercise.completionMode !== "reps") return
+    if (metrics.repCount < exercise.reps) return
+    finishExercise()
+  }, [isRunning, metrics.repCount, session.currentExercise])
 
   // ── Landmark processing ────────────────────────────────────────────────────
   const processLandmarks = useCallback((lms: Landmark[]) => {
@@ -295,23 +414,74 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
 
     const exerciseId = sessionRef.current.currentExercise
 
+    // Compute frame confidence
+    const hasLowerBody = !!(lms[L.LEFT_ANKLE] && lms[L.RIGHT_ANKLE])
+    const avgVisibility = lms.slice(23, 33).reduce((s, lm) => s + (lm.visibility ?? 0.5), 0) / 10
+    const centered = Math.abs(get(L.LEFT_HIP).x - 0.5) < 0.2
+    const frameConfidence = computeFrameConfidence({
+      landmarkVisibility: avgVisibility,
+      lowerBodyVisible: hasLowerBody,
+      centered,
+      lightingOk: true,
+    })
+
+    // Only process CV scoring when exercise is actually running
+    if (!isRunningRef.current) {
+      setMetrics(prev => ({
+        ...prev,
+        kneeFlexionL: lKnee,
+        kneeFlexionR: rKnee,
+        hipFlexionL: lHip,
+        hipFlexionR: rHip,
+        ankleFlexionL: lAnkle,
+        ankleFlexionR: rAnkle,
+        detectedPatterns: [],
+        repCount: 0,
+        formHint: "Press start when ready",
+      }))
+      return
+    }
+
     const rawPatterns = detectPatterns(exerciseId, lms, { lKnee, rKnee, lHip, rHip, lAnkle, rAnkle })
+
+    // Skip low-confidence frames
+    if (frameConfidence < 70) {
+      setMetrics(prev => ({
+        ...prev,
+        formHint: getFrameQualityMessage(frameConfidence, hasLowerBody),
+        movementQuality: Math.round(prev.movementQuality * 0.95),
+      }))
+      return
+    }
+
+    // Smooth angles using temporal fusion
+    angleSmoother.current.push([lKnee, rKnee, lHip, rHip, lAnkle, rAnkle])
+    const [slKnee, srKnee, slHip, srHip, ,] = angleSmoother.current.get()
+    const smoothLKnee = slKnee || lKnee
+    const smoothRKnee = srKnee || rKnee
+    const smoothLHip = slHip || lHip
+    const smoothRHip = srHip || rHip
 
     smoother.current.push(rawPatterns)
     const confirmedPatterns = smoother.current.confirmed()
 
     let reps = repCounter.current.get()
     if (exerciseId === "calf_raise") {
-      reps = repCounter.current.updateAnkle((lAnkle + rAnkle) / 2)
+      const lbv = lowerBodyVisible(lms, L)
+      reps = calfCounter.current.update(
+        get(L.LEFT_HEEL).y,
+        get(L.RIGHT_HEEL).y,
+        lbv
+      )
     } else if (exerciseId !== "single_leg_balance") {
-      reps = repCounter.current.updateKnee((lKnee + rKnee) / 2)
+      reps = repCounter.current.updateKnee((smoothLKnee + smoothRKnee) / 2)
     }
 
-    smoothness.current.push(lKnee)
-    smoothness.current.push(rKnee)
+    smoothness.current.push(smoothLKnee)
+    smoothness.current.push(smoothRKnee)
     const qualityScore  = smoothness.current.score()
     const symmetryScore = Math.round(
-      (computeSymmetryScore(lKnee, rKnee) + computeSymmetryScore(lHip, rHip)) / 2
+      (computeSymmetryScore(smoothLKnee, smoothRKnee) + computeSymmetryScore(smoothLHip, smoothRHip)) / 2
     )
 
     const m: LiveMetrics = {
@@ -319,9 +489,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       symmetry: symmetryScore,
       cardio: 72 + Math.round(Math.random() * 4 - 2),
       breathing: 14 + Math.round(Math.random() * 2 - 1),
-      kneeFlexionL: lKnee, kneeFlexionR: rKnee,
-      hipFlexionL: lHip,   hipFlexionR: rHip,
-      ankleFlexionL: lAnkle, ankleFlexionR: rAnkle,
+      kneeFlexionL: smoothLKnee, kneeFlexionR: smoothRKnee,
+      hipFlexionL: smoothLHip,   hipFlexionR: smoothRHip,
+      ankleFlexionL: lAnkle,   ankleFlexionR: rAnkle,
       detectedPatterns: confirmedPatterns,
       repCount: reps,
       formHint: getHint(confirmedPatterns),
@@ -459,11 +629,25 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
 
   // ── Exercise flow ──────────────────────────────────────────────────────────
   const finishExercise = useCallback(() => {
+    const finishingExerciseId = activeExerciseRef.current
+    if (!finishingExerciseId) return
+    if (isFinishingRef.current) return
+    if (finishingExerciseId !== sessionRef.current.currentExercise) return
+    if (sessionRef.current.completedExercises.includes(finishingExerciseId)) return
+
+    isFinishingRef.current = true
+    activeExerciseRef.current = null
+    isRunningRef.current = false
     setIsRunning(false)
-    if (timerRef.current) clearInterval(timerRef.current)
+    setExerciseTimer(0)
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
 
     const buf = metricsBuf.current
-    const n   = Math.max(buf.length, 1)
+    const n = Math.max(buf.length, 1)
     const avg = buf.reduce(
       (a, m) => ({
         mq: a.mq + m.movementQuality,
@@ -474,7 +658,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     )
 
     const perf: ExercisePerformance = {
-      exerciseId: sessionRef.current.currentExercise,
+      exerciseId: finishingExerciseId,
       movementQuality: Math.round(avg.mq / n),
       symmetry: Math.round(avg.sym / n),
       detectedPatterns: avg.patterns,
@@ -488,41 +672,71 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     const newSession = mode === "client"
       ? advanceSessionSequential(sessionRef.current, perf)
       : advanceSession(sessionRef.current, perf)
+
     sessionRef.current = newSession
     setSession(newSession)
 
+    resetTrackers()
+
+    if (newSession.isComplete) {
+      const handler = (window as any).__handleComplete
+      if (handler) {
+        handler(newSession.muscleScores, newSession)
+      } else {
+        onComplete?.(newSession.muscleScores, newSession)
+      }
+    } else {
+      setShowGuide(true)
+    }
+
+    setTimeout(() => {
+      isFinishingRef.current = false
+    }, 250)
+  }, [metrics, onComplete])
+
+  const resetTrackers = useCallback(() => {
     smoother.current.reset()
     repCounter.current.reset()
     smoothness.current.reset()
     metricsBuf.current = []
-
-    if (newSession.isComplete) {
-      onComplete?.(newSession.muscleScores, newSession)
-    } else {
-      setShowGuide(true)
-    }
-  }, [metrics, onComplete])
+    angleSmoother.current.reset()
+    calfCounter.current.reset()
+  }, [])
 
   const startExercise = useCallback(() => {
+    if (isRunningRef.current || isFinishingRef.current) return
+
+    const exerciseId = sessionRef.current.currentExercise
+    const exercise = EXERCISES[exerciseId]
+
+    activeExerciseRef.current = exerciseId
+    isRunningRef.current = true
+
+    resetTrackers()
     setShowGuide(false)
     setIsRunning(true)
-    const duration = EXERCISES[sessionRef.current.currentExercise].duration
-    setExerciseTimer(duration)
-    timerRef.current = setInterval(() => {
-      setExerciseTimer(t => {
-        if (t <= 1) { finishExercise(); return 0 }
-        return t - 1
-      })
-    }, 1000)
-  }, [finishExercise])
+    setExerciseTimer(exercise.duration)
 
-  const currentExercise = EXERCISES[session.currentExercise]
-  const totalExercises  = 5
-  const progressPct     = (session.completedExercises.length / totalExercises) * 100
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
 
-  const EXERCISE_IDS: ExerciseId[] = [
-    "bodyweight_squat", "reverse_lunge", "single_leg_balance", "hip_hinge", "calf_raise",
-  ]
+    if (exercise.completionMode === "time") {
+      timerRef.current = setInterval(() => {
+        setExerciseTimer(t => {
+          if (t <= 1) { finishExercise(); return 0 }
+          return t - 1
+        })
+      }, 1000)
+    }
+  }, [finishExercise, resetTrackers])
+
+  const currentExerciseId = session.currentExercise
+  const currentExercise = EXERCISES[currentExerciseId]
+  const totalExercises = EXERCISE_ORDER.length
+  const currentIndex = Math.max(0, EXERCISE_ORDER.indexOf(currentExerciseId))
+  const progressPct = ((currentIndex + 1) / totalExercises) * 100
 
   // ─── CLIENT VIEW ──────────────────────────────────────────────────────────
   if (mode === "client") {
@@ -537,36 +751,41 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
         <div className="flex flex-1 flex-col items-center gap-5 p-5">
           <div className="text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#C97A56]">
-              Exercise {session.completedExercises.length + 1} of {totalExercises}
+              Exercise {currentIndex + 1} of {totalExercises}
             </p>
             <h2 className="mt-1 text-[22px] font-semibold tracking-tight">{currentExercise.name}</h2>
           </div>
 
-          <div className="flex w-full max-w-[640px] gap-4">
-            <div className="flex shrink-0 flex-col items-center gap-2">
+          <div className="grid w-full max-w-[1280px] grid-cols-1 gap-6 lg:grid-cols-[180px_minmax(0,1fr)]">
+            <div className="flex flex-col items-center gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">Guide</p>
-              <div className="h-[280px] w-[200px]">
+              <div className="h-[260px] w-[170px]">
                 <HumanModel3D exerciseId={session.currentExercise} />
               </div>
             </div>
 
-            <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-[12px] bg-[#162532]">
+            <div className="relative aspect-video w-full overflow-hidden rounded-[16px] bg-[#162532] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
               <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
-              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" width={640} height={480} />
+              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" width={1280} height={720} />
 
               {isRunning && (
                 <>
-                  <div className="absolute left-1/2 top-3 flex -translate-x-1/2 flex-col items-center">
-                    <span className="text-[52px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
-                      {metrics.repCount}
-                    </span>
-                    <span className="text-[11px] uppercase tracking-[0.12em] text-white/50">reps</span>
-                  </div>
-
-                  <div className="absolute right-3 top-3 flex flex-col items-center">
-                    <span className="text-[28px] font-semibold tabular-nums text-[#C97A56]">{exerciseTimer}</span>
-                    <span className="text-[10px] text-white/40">sec</span>
-                  </div>
+                  {session.currentExercise === "single_leg_balance" ? (
+                    <div className="absolute left-1/2 top-3 flex -translate-x-1/2 flex-col items-center">
+                      <span className="text-[52px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
+                        {exerciseTimer}
+                      </span>
+                      <span className="text-[11px] uppercase tracking-[0.12em] text-white/50">seconds</span>
+                    </div>
+                  ) : (
+                    <div className="absolute left-1/2 top-3 flex -translate-x-1/2 flex-col items-center">
+                      <span className="text-[52px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
+                        {metrics.repCount}
+                        <span className="text-[22px] text-white/50"> / {currentExercise.reps}</span>
+                      </span>
+                      <span className="text-[11px] uppercase tracking-[0.12em] text-white/50">reps</span>
+                    </div>
+                  )}
 
                   <div className={`absolute inset-x-0 bottom-0 px-4 py-3 text-center text-[13px] font-semibold transition-all ${
                     goodForm ? "bg-[#27AE60]/85 text-white" : "bg-[#F0A500]/85 text-[#1A1A1A]"
@@ -614,7 +833,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {EXERCISE_IDS.map((id, i) => {
+        {EXERCISE_ORDER.map((id, i) => {
           const done   = session.completedExercises.includes(id)
           const active = session.currentExercise === id
           return (
