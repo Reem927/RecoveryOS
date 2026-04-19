@@ -132,7 +132,7 @@ export default function InsightsPage() {
               <div className="flex-1">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/70">
                   <Sparkles className="h-3 w-3 text-[#C97A56]" />
-                  Hydrawav3 analysis complete
+                  RecoveryOS analysis complete
                 </span>
                 <h2 className="mt-3 text-balance text-[26px] font-semibold leading-tight tracking-tight">
                   Ready for a targeted{" "}
@@ -178,7 +178,7 @@ export default function InsightsPage() {
                 </span>
               </div>
               <h3 className="mt-3 text-[22px] font-semibold tracking-tight text-[#1F2937]">
-                Hydrawav3 · Protocol H3-Beta
+                RecoveryOS · Protocol H3-Beta
               </h3>
               <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
                 Scapular stabilisation wave + vagal-down breathing. Targets asymmetry while
@@ -380,7 +380,7 @@ export default function InsightsPage() {
                   </p>
                   <textarea
                     rows={3}
-                    placeholder="Add practitioner note (optional)…"
+                    placeholder="Add professional note (optional)…"
                     className="mt-3 w-full resize-none rounded-[8px] border border-black/[0.08] bg-white px-3 py-2 text-[12px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/20"
                   />
                 </div>

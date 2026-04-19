@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Hydrawav3 core palette */
+  /* RecoveryOS core palette */
   --h3-sidebar-bg: #162532;
   --h3-sidebar-bg-2: #1a2e3b;
   --h3-topbar-deep: #0f1e28;

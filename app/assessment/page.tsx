@@ -255,7 +255,7 @@ export default function AssessmentPage() {
                   <span className="font-semibold text-[#1F2937]">H3-Beta · 18 min</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[#6B7280]">Practitioner</span>
+                  <span className="text-[#6B7280]">Professional</span>
                   <span className="font-semibold text-[#1F2937]">Dr. Ruiz</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -277,7 +277,7 @@ export default function AssessmentPage() {
                 </span>
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#C97A56]">
-                    Hydrawav3 assist
+                    RecoveryOS assist
                   </div>
                   <h4 className="mt-1 text-[14px] font-semibold tracking-tight text-[#1F2937]">
                     Suggestion based on yesterday&apos;s data

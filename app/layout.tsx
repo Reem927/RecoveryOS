@@ -10,9 +10,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Hydrawav3 — Practitioner Recovery Platform",
+  title: "RecoveryOS — The Operating System for Modern Recovery",
   description:
-    "Pre-session recovery assessments, live session control, and long-term patient progress — all in one practitioner workspace.",
+    "RecoveryOS turns every pre-session check, live session, and long-term progress trend into one connected workspace — built for clinics, sports rehab, and performance teams.",
   generator: "v0.app",
 }
 
