@@ -14,6 +14,7 @@ import {
   createSession, advanceSession, advanceSessionSequential, MEDIAPIPE_LANDMARKS, MuscleScore,
 } from "@/lib/leg-assessment-engine"
 import { computeFrameConfidence, getFrameQualityMessage, AngleSmoother } from "@/lib/vision-fusion"
+import { validateExerciseFrame, ThresholdRepCounter, fullBodyVisible, SquatRepCounter } from "@/lib/exercise-validators"
 import dynamic from "next/dynamic"
 
 const HumanModel3D = dynamic(
@@ -344,6 +345,21 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   const angleSmoother = useRef(new AngleSmoother(8))
   const calfCounter = useRef(new CalfRaiseCounter())
 
+  // Exercise-specific rep counters
+  const repCountersRef = useRef({
+    bodyweight_squat: new ThresholdRepCounter(65, 25, "increase"),
+    reverse_lunge: new ThresholdRepCounter(55, 22, "increase"),
+    hip_hinge: new ThresholdRepCounter(35, 12, "increase"),
+    calf_raise: new ThresholdRepCounter(0.02, 0.008, "decrease"),
+  })
+
+  // Squat-specific counter
+  const squatCounter = useRef(new SquatRepCounter())
+
+  // Balance hold timer refs
+  const validHoldSecondsRef = useRef(0)
+  const lastHoldTickRef = useRef<number | null>(null)
+
   const isRunningRef = useRef(false)
   const isFinishingRef = useRef(false)
   const activeExerciseRef = useRef<ExerciseId | null>(null)
@@ -462,20 +478,88 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     const smoothLHip = slHip || lHip
     const smoothRHip = srHip || rHip
 
-    smoother.current.push(rawPatterns)
-    const confirmedPatterns = smoother.current.confirmed()
-
-    let reps = repCounter.current.get()
-    if (exerciseId === "calf_raise") {
-      const lbv = lowerBodyVisible(lms, L)
-      reps = calfCounter.current.update(
-        get(L.LEFT_HEEL).y,
-        get(L.RIGHT_HEEL).y,
-        lbv
-      )
-    } else if (exerciseId !== "single_leg_balance") {
-      reps = repCounter.current.updateKnee((smoothLKnee + smoothRKnee) / 2)
+    // Gate: full body must be visible before any scoring
+    if (isRunningRef.current) {
+      const bodyCheck = fullBodyVisible(lms)
+      if (!bodyCheck.visible) {
+        setMetrics(prev => ({
+          ...prev,
+          kneeFlexionL: smoothLKnee, kneeFlexionR: smoothRKnee,
+          hipFlexionL: smoothLHip, hipFlexionR: smoothRHip,
+          ankleFlexionL: lAnkle, ankleFlexionR: rAnkle,
+          detectedPatterns: ["full_body_not_visible"],
+          formHint: bodyCheck.reason,
+        }))
+        return
+      }
     }
+
+    // Run exercise-specific validation
+    const validation = validateExerciseFrame({
+      exerciseId,
+      landmarks: lms,
+      angles: {
+        kneeL: smoothLKnee,
+        kneeR: smoothRKnee,
+        hipL: smoothLHip,
+        hipR: smoothRHip,
+        ankleL: lAnkle,
+        ankleR: rAnkle,
+      },
+    })
+
+    if (!validation.ready || !validation.validFrame) {
+      setMetrics(prev => ({
+        ...prev,
+        kneeFlexionL: smoothLKnee, kneeFlexionR: smoothRKnee,
+        hipFlexionL: smoothLHip, hipFlexionR: smoothRHip,
+        ankleFlexionL: lAnkle, ankleFlexionR: rAnkle,
+        detectedPatterns: validation.patterns,
+        formHint: validation.formHint,
+      }))
+      return
+    }
+
+    // Handle balance hold timing separately
+    if (exerciseId === "single_leg_balance") {
+      const now = performance.now()
+      if (lastHoldTickRef.current == null) {
+        lastHoldTickRef.current = now
+      }
+      const delta = (now - lastHoldTickRef.current) / 1000
+      lastHoldTickRef.current = now
+      if (validation.ready && validation.validFrame) {
+        validHoldSecondsRef.current += delta
+      }
+      setExerciseTimer(prev => Math.max(0, EXERCISES[exerciseId].duration - Math.floor(validHoldSecondsRef.current)))
+      if (validHoldSecondsRef.current >= EXERCISES[exerciseId].duration) {
+        finishExercise()
+        return
+      }
+    }
+
+    // Use exercise-specific rep counters
+    let reps = metrics.repCount
+    if (exerciseId === "bodyweight_squat") {
+      const avgKnee = (smoothLKnee + smoothRKnee) / 2
+      const hipY = (get(L.LEFT_HIP).y + get(L.RIGHT_HIP).y) / 2
+      const ankleY = (get(L.LEFT_ANKLE).y + get(L.RIGHT_ANKLE).y) / 2
+      const hipDropSignal = ankleY - hipY
+      reps = squatCounter.current.update(
+        avgKnee,
+        hipDropSignal,
+        validation.ready && validation.validFrame
+      )
+    } else if (exerciseId === "reverse_lunge") {
+      reps = repCountersRef.current.reverse_lunge.update(validation.repSignal)
+    } else if (exerciseId === "hip_hinge") {
+      reps = repCountersRef.current.hip_hinge.update(validation.repSignal)
+    } else if (exerciseId === "calf_raise") {
+      reps = repCountersRef.current.calf_raise.update(validation.repSignal)
+    }
+
+    smoother.current.push(validation.patterns)
+    const confirmedPatterns = smoother.current.confirmed()
 
     smoothness.current.push(smoothLKnee)
     smoothness.current.push(smoothRKnee)
@@ -492,9 +576,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       kneeFlexionL: smoothLKnee, kneeFlexionR: smoothRKnee,
       hipFlexionL: smoothLHip,   hipFlexionR: smoothRHip,
       ankleFlexionL: lAnkle,   ankleFlexionR: rAnkle,
-      detectedPatterns: confirmedPatterns,
+      detectedPatterns: validation.patterns.length > 0 ? validation.patterns : confirmedPatterns,
       repCount: reps,
-      formHint: getHint(confirmedPatterns),
+      formHint: validation.formHint,
     }
 
     metricsBuf.current.push(m)
@@ -526,52 +610,68 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     })
   }, [])
 
-  // ── Skeleton draw ──────────────────────────────────────────────────────────
+  // ── Full body skeleton draw ──────────────────────────────────────────────
+  const FULL_BODY_CONNECTIONS: [number, number][] = [
+    // torso
+    [11, 12], [11, 23], [12, 24], [23, 24],
+    // left arm
+    [11, 13], [13, 15], [15, 17], [15, 19], [15, 21],
+    // right arm
+    [12, 14], [14, 16], [16, 18], [16, 20], [16, 22],
+    // left leg
+    [23, 25], [25, 27], [27, 29], [29, 31], [27, 31],
+    // right leg
+    [24, 26], [26, 28], [28, 30], [30, 32], [28, 32],
+  ]
+
+  function drawFullBodySkeleton(ctx: CanvasRenderingContext2D, landmarks: Landmark[], width: number, height: number) {
+    ctx.clearRect(0, 0, width, height)
+
+    ctx.lineWidth = 5
+    ctx.strokeStyle = "rgba(201,122,86,0.85)"
+    ctx.fillStyle = "rgba(255,255,255,0.95)"
+
+    for (const [a, b] of FULL_BODY_CONNECTIONS) {
+      const pa = landmarks[a]
+      const pb = landmarks[b]
+      if (!pa || !pb) continue
+
+      const va = pa.visibility ?? 1
+      const vb = pb.visibility ?? 1
+      if (va < 0.45 || vb < 0.45) continue
+
+      ctx.beginPath()
+      ctx.moveTo(pa.x * width, pa.y * height)
+      ctx.lineTo(pb.x * width, pb.y * height)
+      ctx.stroke()
+    }
+
+    for (let i = 0; i < landmarks.length; i++) {
+      const p = landmarks[i]
+      if (!p) continue
+      if ((p.visibility ?? 1) < 0.45) continue
+      if (i >= 13 && i <= 22) continue // skip hands for now
+
+      const radius = [11, 12, 23, 24, 25, 26, 27, 28].includes(i) ? 8 : 6
+      ctx.beginPath()
+      ctx.arc(p.x * width, p.y * height, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
   const drawSkeleton = useCallback((lms: Landmark[], canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const width = rect.width
+    const height = rect.height
+    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+      canvas.width = Math.round(width * dpr)
+      canvas.height = Math.round(height * dpr)
+    }
     const ctx = canvas.getContext("2d")
     if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    const W = canvas.width, H = canvas.height
-    const L = MEDIAPIPE_LANDMARKS
-    const get = (i: number) => lms[i]
-
-    const connections: [number, number][] = [
-      [L.LEFT_HIP, L.RIGHT_HIP],
-      [L.LEFT_HIP, L.LEFT_KNEE],    [L.RIGHT_HIP, L.RIGHT_KNEE],
-      [L.LEFT_KNEE, L.LEFT_ANKLE],  [L.RIGHT_KNEE, L.RIGHT_ANKLE],
-      [L.LEFT_ANKLE, L.LEFT_HEEL],  [L.RIGHT_ANKLE, L.RIGHT_HEEL],
-      [L.LEFT_ANKLE, L.LEFT_FOOT_INDEX], [L.RIGHT_ANKLE, L.RIGHT_FOOT_INDEX],
-      [L.LEFT_SHOULDER, L.RIGHT_SHOULDER],
-      [L.LEFT_SHOULDER, L.LEFT_HIP], [L.RIGHT_SHOULDER, L.RIGHT_HIP],
-    ]
-
-    connections.forEach(([a, b]) => {
-      const pa = get(a), pb = get(b)
-      if (!pa || !pb) return
-      ctx.beginPath()
-      ctx.moveTo(pa.x * W, pa.y * H)
-      ctx.lineTo(pb.x * W, pb.y * H)
-      ctx.strokeStyle = "#C97A56"
-      ctx.lineWidth = 3
-      ctx.shadowColor = "#C97A56"
-      ctx.shadowBlur = 8
-      ctx.stroke()
-      ctx.shadowBlur = 0
-    })
-
-    const joints = [L.LEFT_HIP, L.RIGHT_HIP, L.LEFT_KNEE, L.RIGHT_KNEE,
-      L.LEFT_ANKLE, L.RIGHT_ANKLE, L.LEFT_SHOULDER, L.RIGHT_SHOULDER]
-    joints.forEach(idx => {
-      const lm = get(idx)
-      if (!lm) return
-      ctx.beginPath()
-      ctx.arc(lm.x * W, lm.y * H, 6, 0, Math.PI * 2)
-      ctx.fillStyle = "#ffffff"
-      ctx.shadowColor = "#C97A56"
-      ctx.shadowBlur = 10
-      ctx.fill()
-      ctx.shadowBlur = 0
-    })
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    drawFullBodySkeleton(ctx, lms, width, height)
   }, [])
 
   // ── MediaPipe init ─────────────────────────────────────────────────────────
@@ -701,6 +801,10 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     metricsBuf.current = []
     angleSmoother.current.reset()
     calfCounter.current.reset()
+    squatCounter.current.reset()
+    Object.values(repCountersRef.current).forEach(counter => counter.reset())
+    validHoldSecondsRef.current = 0
+    lastHoldTickRef.current = null
   }, [])
 
   const startExercise = useCallback(() => {
@@ -740,91 +844,139 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
 
   // ─── CLIENT VIEW ──────────────────────────────────────────────────────────
   if (mode === "client") {
-    const goodForm = metrics.detectedPatterns.length === 0 && isRunning
+    const blockingPatterns = [
+      "full_body_not_visible",
+      "lower_body_not_visible",
+      "both_feet_down",
+      "not_in_lunge_position",
+      "not_hinging",
+    ]
+    const goodForm =
+      isRunning &&
+      !metrics.detectedPatterns.some(p => blockingPatterns.includes(p)) &&
+      metrics.formHint.toLowerCase().includes("good")
+    const isBalance = session.currentExercise === "single_leg_balance"
     return (
-      <div className="flex h-full min-h-screen flex-col bg-[#0F1E28] text-white">
-        <div className="relative h-1.5 w-full bg-white/10">
-          <div className="absolute h-full rounded-full bg-gradient-to-r from-[#C97A56] to-[#F0A500] transition-all duration-700"
-            style={{ width: `${progressPct}%` }} />
+      <div className="flex min-h-[calc(100dvh-60px)] w-full flex-col bg-[#0B1820] text-white">
+        <div className="h-1.5 w-full bg-white/10">
+          <div
+            className="h-full bg-[#C97A56] transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
 
-        <div className="flex flex-1 flex-col items-center gap-5 p-5">
-          <div className="text-center">
+        <div className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 items-center gap-8 px-8 py-8 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="flex flex-col items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.035] p-5">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              Guide
+            </p>
+
+            <div className="h-[440px] w-full">
+              <HumanModel3D exerciseId={session.currentExercise} zoom={1.35} />
+            </div>
+
+            <p className="mt-4 text-center text-[13px] leading-relaxed text-white/60">
+              Watch the movement first, then copy it slowly.
+            </p>
+          </aside>
+
+          <section className="flex flex-col items-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#C97A56]">
               Exercise {currentIndex + 1} of {totalExercises}
             </p>
-            <h2 className="mt-1 text-[22px] font-semibold tracking-tight">{currentExercise.name}</h2>
-          </div>
 
-          <div className="grid w-full max-w-[1280px] grid-cols-1 gap-6 lg:grid-cols-[180px_minmax(0,1fr)]">
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">Guide</p>
-              <div className="h-[260px] w-[170px]">
-                <HumanModel3D exerciseId={session.currentExercise} />
-              </div>
-            </div>
+            <h1 className="mt-2 text-center text-[28px] font-semibold tracking-tight text-white">
+              {currentExercise.name}
+            </h1>
 
-            <div className="relative aspect-video w-full overflow-hidden rounded-[16px] bg-[#162532] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-              <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
-              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" width={1280} height={720} />
+            <div className="relative mt-6 aspect-video w-full max-w-[980px] overflow-hidden rounded-[20px] bg-black shadow-[0_28px_80px_rgba(0,0,0,0.45)]">
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                playsInline
+                muted
+              />
+
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 h-full w-full"
+              />
+
+              {process.env.NODE_ENV !== "production" && (
+                <div className="absolute bottom-3 left-3 rounded-[10px] bg-black/70 px-3 py-2 text-[11px] text-white/80">
+                  <div>Exercise: {session.currentExercise}</div>
+                  <div>Running: {String(isRunning)}</div>
+                  <div>Hint: {metrics.formHint}</div>
+                  <div>Reps: {metrics.repCount}</div>
+                  <div>Timer: {exerciseTimer}s</div>
+                  <div>Patterns: {metrics.detectedPatterns.join(", ") || "none"}</div>
+                </div>
+              )}
 
               {isRunning && (
                 <>
-                  {session.currentExercise === "single_leg_balance" ? (
-                    <div className="absolute left-1/2 top-3 flex -translate-x-1/2 flex-col items-center">
-                      <span className="text-[52px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
+                  {isBalance ? (
+                    <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+                      <span className="text-[72px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
                         {exerciseTimer}
                       </span>
-                      <span className="text-[11px] uppercase tracking-[0.12em] text-white/50">seconds</span>
+                      <span className="text-[13px] uppercase tracking-[0.12em] text-white/50">seconds</span>
                     </div>
                   ) : (
-                    <div className="absolute left-1/2 top-3 flex -translate-x-1/2 flex-col items-center">
-                      <span className="text-[52px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
+                    <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+                      <span className="text-[72px] font-bold tabular-nums leading-none text-white drop-shadow-lg">
                         {metrics.repCount}
-                        <span className="text-[22px] text-white/50"> / {currentExercise.reps}</span>
+                        <span className="text-[28px] text-white/50"> / {currentExercise.reps}</span>
                       </span>
-                      <span className="text-[11px] uppercase tracking-[0.12em] text-white/50">reps</span>
+                      <span className="text-[13px] uppercase tracking-[0.12em] text-white/50">reps</span>
                     </div>
                   )}
 
-                  <div className={`absolute inset-x-0 bottom-0 px-4 py-3 text-center text-[13px] font-semibold transition-all ${
-                    goodForm ? "bg-[#27AE60]/85 text-white" : "bg-[#F0A500]/85 text-[#1A1A1A]"
+                  <div className={`absolute inset-x-0 bottom-0 px-6 py-4 text-center text-[15px] font-semibold transition-all ${
+                    goodForm ? "bg-[#27AE60]/90 text-white" : "bg-[#F0A500]/90 text-[#1A1A1A]"
                   }`}>
                     {goodForm
-                      ? <span className="flex items-center justify-center gap-2"><CheckCircle2 className="h-4 w-4" />Great form!</span>
-                      : <span className="flex items-center justify-center gap-2"><AlertTriangle className="h-4 w-4" />{metrics.formHint}</span>
+                      ? <span className="flex items-center justify-center gap-2"><CheckCircle2 className="h-5 w-5" />Great form!</span>
+                      : <span className="flex items-center justify-center gap-2"><AlertTriangle className="h-5 w-5" />{metrics.formHint}</span>
                     }
                   </div>
                 </>
               )}
+
               {!cameraReady && (
-                <div className="absolute inset-0 flex items-center justify-center text-[13px] text-white/50">Starting camera…</div>
+                <div className="absolute inset-0 flex items-center justify-center text-[14px] text-white/50">Starting camera…</div>
               )}
             </div>
-          </div>
 
-          <div className="max-w-[500px] rounded-[12px] border border-white/10 bg-white/[0.04] px-5 py-3 text-center">
-            <p className="text-[13px] leading-relaxed text-white/75">{currentExercise.clientCue}</p>
-          </div>
+            <div className="mt-5 max-w-[820px] rounded-[12px] border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-[15px] leading-relaxed text-white/75">
+              {currentExercise.clientCue}
+            </div>
+          </section>
+        </div>
 
-          {showGuide ? (
-            <button onClick={startExercise}
-              className="inline-flex h-12 items-center gap-2 rounded-[10px] bg-[#C97A56] px-8 text-[14px] font-semibold text-white hover:bg-[#B86A48]">
-              <Play className="h-4 w-4" />I&apos;m ready — start
-            </button>
-          ) : (
-            <div className="w-full max-w-[400px]">
-              <div className="mb-1.5 flex justify-between text-[11px] text-white/50">
+        {showGuide ? (
+          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-[#0F1E28] p-4">
+            <div className="mx-auto max-w-[400px]">
+              <button onClick={startExercise}
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-[12px] bg-[#C97A56] text-[15px] font-semibold text-white hover:bg-[#B86A48]">
+                <Play className="h-5 w-5" />I&apos;m ready — start
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-[#0F1E28] p-4">
+            <div className="mx-auto max-w-[980px]">
+              <div className="mb-2 flex justify-between text-[12px] text-white/50">
                 <span>{currentExercise.name}</span>
                 <span>{exerciseTimer}s left</span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#C97A56] to-[#F0A500] transition-all"
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full bg-[#C97A56] transition-all"
                   style={{ width: `${100 - (exerciseTimer / currentExercise.duration) * 100}%` }} />
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     )
   }

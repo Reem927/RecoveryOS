@@ -1,40 +1,62 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { CheckCircle2 } from "lucide-react"
+import { useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { CheckCircle2, AlertTriangle } from "lucide-react"
 import LegAssessmentScan from "@/components/hydrawav3/LegAssessmentScan"
 import type { MuscleScore, AssessmentSession } from "@/lib/leg-assessment-engine"
+import { supabase } from "@/lib/supabase"
 
 export default function ClientScanPage() {
-  const [complete, setComplete] = useState(false)
+  const searchParams = useSearchParams()
+  const patientId = searchParams.get("patient")
+  const sessionId = searchParams.get("session")
 
-  useEffect(() => {
-    function handleComplete(_scores: MuscleScore[], _session: AssessmentSession) {
-      setComplete(true)
+  const [complete, setComplete] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  async function handleComplete(scores: MuscleScore[], session: AssessmentSession) {
+    setComplete(true)
+
+    if (!patientId) {
+      setSaveError("No patient ID in URL (add ?patient=<uuid>). Results not saved.")
+      return
     }
-    // Store in window for access from child
-    ;(window as any).__handleComplete = handleComplete
-    return () => {
-      delete (window as any).__handleComplete
+
+    const { error } = await supabase.from("cv_scans").insert({
+      patient_id: patientId,
+      session_id: sessionId ?? null,
+      exercises: session.performances,
+      metrics: {
+        muscleScores: scores,
+        completedExercises: session.completedExercises,
+      },
+    })
+
+    if (error) {
+      setSaveError(error.message)
     }
-  }, [])
+  }
 
   if (complete) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
+      <div className="flex min-h-[calc(100dvh-60px)] flex-col items-center justify-center gap-4 bg-[#0B1820] text-center text-white">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#27AE60]/15">
           <CheckCircle2 className="h-8 w-8 text-[#27AE60]" />
         </div>
-        <h2 className="text-[24px] font-semibold tracking-tight text-white">
-          Great work!
-        </h2>
+        <h2 className="text-[24px] font-semibold tracking-tight">Great work!</h2>
         <p className="max-w-sm text-[14px] leading-relaxed text-white/60">
-          Your practitioner has been notified. You can close this page or wait
-          for further instructions.
+          Your practitioner has been notified. You can close this page or wait for further instructions.
         </p>
+        {saveError && (
+          <div className="mt-2 flex max-w-sm items-start gap-2 rounded-[10px] border border-[#F0A500]/30 bg-[#F0A500]/10 px-4 py-3 text-left text-[12px] text-[#F0A500]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+        )}
       </div>
     )
   }
 
-  return <LegAssessmentScan mode="client" />
+  return <LegAssessmentScan mode="client" onComplete={handleComplete} />
 }

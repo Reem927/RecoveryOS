@@ -521,8 +521,23 @@ export function computeSymmetryScore(leftAngle: number, rightAngle: number): num
   return Math.round(Math.max(0, 100 - pct * 3))
 }
 
-// MediaPipe landmark indices for key leg joints
+// MediaPipe landmark indices for full body tracking
 export const MEDIAPIPE_LANDMARKS = {
+  NOSE: 0,
+
+  LEFT_SHOULDER: 11,
+  RIGHT_SHOULDER: 12,
+  LEFT_ELBOW: 13,
+  RIGHT_ELBOW: 14,
+  LEFT_WRIST: 15,
+  RIGHT_WRIST: 16,
+  LEFT_PINKY: 17,
+  RIGHT_PINKY: 18,
+  LEFT_INDEX: 19,
+  RIGHT_INDEX: 20,
+  LEFT_THUMB: 21,
+  RIGHT_THUMB: 22,
+
   LEFT_HIP: 23,
   RIGHT_HIP: 24,
   LEFT_KNEE: 25,
@@ -533,6 +548,4 @@ export const MEDIAPIPE_LANDMARKS = {
   RIGHT_HEEL: 30,
   LEFT_FOOT_INDEX: 31,
   RIGHT_FOOT_INDEX: 32,
-  LEFT_SHOULDER: 11,
-  RIGHT_SHOULDER: 12,
 }

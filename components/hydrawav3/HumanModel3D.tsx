@@ -258,10 +258,16 @@ function AnimatedHuman({ exerciseId }: { exerciseId: string }) {
   )
 }
 
-function HumanModel3DInner({ exerciseId }: { exerciseId: string }) {
+function HumanModel3DInner({
+  exerciseId,
+  zoom = 1,
+}: {
+  exerciseId: string
+  zoom?: number
+}) {
   return (
     <Canvas
-      camera={{ position: [-3.2, 0.85, 0.3], fov: 44, near: 0.1, far: 100 }}
+      camera={{ position: [-3.2 / zoom, 0.85, 0.3 / zoom], fov: 44, near: 0.1, far: 100 }}
       style={{ background: "transparent" }}
       shadows
     >
@@ -283,7 +289,13 @@ function HumanModel3DInner({ exerciseId }: { exerciseId: string }) {
   )
 }
 
-function HumanModel3DWithSuspense({ exerciseId }: { exerciseId: string }) {
+function HumanModel3DWithSuspense({
+  exerciseId,
+  zoom = 1,
+}: {
+  exerciseId: string
+  zoom?: number
+}) {
   return (
     <Suspense
       fallback={
@@ -292,7 +304,7 @@ function HumanModel3DWithSuspense({ exerciseId }: { exerciseId: string }) {
         </div>
       }
     >
-      <HumanModel3DInner exerciseId={exerciseId} />
+      <HumanModel3DInner exerciseId={exerciseId} zoom={zoom} />
     </Suspense>
   )
 }
