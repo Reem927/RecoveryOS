@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-import { redirect } from "next/navigation"
-
-export default function DashboardRedirectPage() {
-  redirect("/")
-}
-=======
 import Link from "next/link"
 import {
   Activity,
@@ -333,4 +326,3 @@ export default function DashboardPage() {
     </AppShell>
   )
 }
->>>>>>> 33b5f22 (added landing page and fixed bugs)

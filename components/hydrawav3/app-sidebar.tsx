@@ -3,17 +3,9 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-<<<<<<< HEAD
-  Activity,
   ClipboardCheck,
   LayoutDashboard,
   LifeBuoy,
-  LineChart,
-=======
-  ClipboardCheck,
-  LayoutDashboard,
-  LifeBuoy,
->>>>>>> 33b5f22 (added landing page and fixed bugs)
   LogOut,
   PlayCircle,
   Settings,
@@ -45,11 +37,7 @@ export function AppSidebar() {
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
-<<<<<<< HEAD
-      return pathname === "/" || pathname === "/dashboard"
-=======
       return pathname === "/dashboard"
->>>>>>> 33b5f22 (added landing page and fixed bugs)
     }
 
     if (href.startsWith("/patients")) {
