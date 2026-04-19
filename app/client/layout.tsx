@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { LogOut } from "lucide-react"
-import { RecoveryOSLogo } from "@/components/hydrawav3/logo"
+import { Hydrawav3Logo } from "@/components/hydrawav3/logo"
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -8,7 +8,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       <header className="sticky top-0 z-20 border-b border-black/[0.06] bg-[#0F1E28] text-white">
         <div className="mx-auto flex h-[60px] max-w-[1200px] items-center justify-between px-5">
           <div className="flex items-center gap-3">
-            <RecoveryOSLogo subtitle={null} />
+            <Hydrawav3Logo subtitle={null} />
             <span className="hidden rounded-full bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/70 sm:inline-flex">
               Patient portal
             </span>

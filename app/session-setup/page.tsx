@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useActiveSession } from "@/lib/active-session"
 import {
   ArrowRight,
   CalendarClock,
@@ -102,6 +104,9 @@ const clients: ClientRecord[] = [
 const recentClientIds = ["alex-morgan", "priya-chandra", "amira-hassan", "tomas-oliveira"]
 
 export default function SessionSetupPage() {
+  const router = useRouter()
+  const { startSession } = useActiveSession()
+
   const [clientType, setClientType] = useState<ClientType>("existing")
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState<string>("alex-morgan")
@@ -127,6 +132,28 @@ export default function SessionSetupPage() {
     (clientType === "existing" && !!selected) ||
     (clientType === "new" && newName.trim().length > 0) ||
     clientType === "guest"
+
+  const resolvedPatient = () => {
+    if (clientType === "existing" && selected) {
+      return { id: selected.id, name: selected.name }
+    }
+    if (clientType === "new") {
+      return { id: "new", name: newName.trim() || "New client" }
+    }
+    return { id: "guest", name: "Guest session" }
+  }
+
+  const handleQuickStart = () => {
+    if (!canContinue) return
+    const p = resolvedPatient()
+    startSession({
+      patientId: p.id,
+      patientName: p.name,
+      protocol: "H3-Beta · 18 min",
+      room: "Room 2",
+    })
+    router.push("/session")
+  }
 
   return (
     <AppShell
@@ -379,10 +406,11 @@ export default function SessionSetupPage() {
               </Link>
 
               {/* Secondary — Quick start */}
-              <Link
-                href={canContinue ? "/session" : "#"}
-                aria-disabled={!canContinue}
-                className={`group relative overflow-hidden rounded-[14px] border bg-white p-5 transition-transform ${
+              <button
+                type="button"
+                onClick={handleQuickStart}
+                disabled={!canContinue}
+                className={`group relative overflow-hidden rounded-[14px] border bg-white p-5 text-left transition-transform ${
                   canContinue
                     ? "border-black/[0.08] hover:-translate-y-0.5 hover:border-[#C97A56]/40"
                     : "cursor-not-allowed opacity-60"
@@ -411,7 +439,7 @@ export default function SessionSetupPage() {
                     Start <ArrowRight className="h-3.5 w-3.5" />
                   </span>
                 </div>
-              </Link>
+              </button>
             </div>
 
             {!canContinue && (

@@ -294,7 +294,7 @@ export default function ClientDashboard() {
           </ol>
           <div className="flex items-start gap-2 border-t border-black/[0.06] bg-[#F5F0EA]/50 px-5 py-3 text-[12px] text-[#6B7280]">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C97A56]" />
-            Only your professional can update milestones. Message Dr. Ruiz if anything feels off.
+            Only your practitioner can update milestones. Message Dr. Ruiz if anything feels off.
           </div>
         </div>
       </section>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+import { ActiveSessionProvider } from "@/lib/active-session"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -10,9 +11,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "RecoveryOS — The Operating System for Modern Recovery",
+  title: "Hydrawav3 — Practitioner Recovery Platform",
   description:
-    "RecoveryOS turns every pre-session check, live session, and long-term progress trend into one connected workspace — built for clinics, sports rehab, and performance teams.",
+    "Pre-session recovery assessments, live session control, and long-term patient progress — all in one practitioner workspace.",
   generator: "v0.app",
 }
 
@@ -30,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} bg-background`}>
       <body className="font-sans antialiased">
-        {children}
+        <ActiveSessionProvider>{children}</ActiveSessionProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

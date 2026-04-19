@@ -13,13 +13,13 @@ import {
   LineChart,
   Sparkles,
 } from "lucide-react"
-import { RecoveryOSLogo } from "@/components/hydrawav3/logo"
+import { Hydrawav3Logo } from "@/components/hydrawav3/logo"
 
-type Role = "professional" | "client"
+type Role = "practitioner" | "client"
 
 export default function LoginPage() {
-  const [role, setRole] = useState<Role>("professional")
-  const isProfessional = role === "professional"
+  const [role, setRole] = useState<Role>("practitioner")
+  const isPractitioner = role === "practitioner"
 
   return (
     <div className="relative min-h-screen w-full bg-[#0F1E28] text-white">
@@ -33,17 +33,15 @@ export default function LoginPage() {
       <div className="relative mx-auto grid min-h-screen w-full max-w-[1280px] grid-cols-1 lg:grid-cols-2">
         {/* Left: brand story, swaps based on role */}
         <div className="hidden flex-col justify-between px-10 py-10 lg:flex">
-          <Link href="/" className="w-fit">
-            <RecoveryOSLogo subtitle={null} />
-          </Link>
+          <Hydrawav3Logo />
 
           <div className="max-w-md">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/70">
               <span className="h-1.5 w-1.5 rounded-full bg-[#27AE60]" />
-              {isProfessional ? "Platform v3.2 · Stable" : "Patient portal · Secure"}
+              {isPractitioner ? "Platform v3.2 · Stable" : "Patient portal · Secure"}
             </div>
 
-            {isProfessional ? (
+            {isPractitioner ? (
               <>
                 <h2 className="text-balance text-[34px] font-semibold leading-[1.1] tracking-tight">
                   Pre-session recovery,{" "}
@@ -51,12 +49,12 @@ export default function LoginPage() {
                 </h2>
                 <p className="mt-4 text-pretty text-[14px] leading-relaxed text-white/60">
                   Camera-based movement analysis, vitals estimation, and protocol recommendations —
-                  built for professionals who need answers before the patient is on the table.
+                  built for practitioners who need answers before the patient is on the table.
                 </p>
                 <ul className="mt-8 space-y-3">
                   {[
                     { icon: Activity, text: "Range of motion & asymmetry in under 90 seconds" },
-                    { icon: Waves, text: "Personalised recovery protocol per session" },
+                    { icon: Waves, text: "Personalised Hydrawav3 protocol per session" },
                     { icon: ShieldCheck, text: "HIPAA-aligned. Data stays in your clinic." },
                   ].map((item) => (
                     <li key={item.text} className="flex items-center gap-3 text-[13px] text-white/75">
@@ -76,13 +74,13 @@ export default function LoginPage() {
                 </h2>
                 <p className="mt-4 text-pretty text-[14px] leading-relaxed text-white/60">
                   Track your progress, see your recovery scores, and follow the protocol your
-                  care team prescribed — all in one private space.
+                  practitioner prescribed — all in one private space.
                 </p>
                 <ul className="mt-8 space-y-3">
                   {[
                     { icon: HeartPulse, text: "See your recovery score after every visit" },
                     { icon: LineChart, text: "Track range of motion and symmetry over time" },
-                    { icon: Sparkles, text: "Home exercises curated by your care team" },
+                    { icon: Sparkles, text: "Home exercises curated by your practitioner" },
                   ].map((item) => (
                     <li key={item.text} className="flex items-center gap-3 text-[13px] text-white/75">
                       <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-white/[0.04] ring-1 ring-white/10">
@@ -97,7 +95,7 @@ export default function LoginPage() {
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-white/40">
-            <span>© 2026 RecoveryOS Health Systems</span>
+            <span>© 2026 Hydrawav3 Health Systems</span>
             <span className="h-1 w-1 rounded-full bg-white/20" />
             <Link href="#" className="hover:text-white/70">
               Privacy
@@ -112,9 +110,7 @@ export default function LoginPage() {
         <div className="flex flex-col justify-center px-5 py-10 sm:px-10">
           <div className="mx-auto w-full max-w-[440px]">
             <div className="mb-8 flex justify-center lg:hidden">
-              <Link href="/">
-                <RecoveryOSLogo subtitle={null} />
-              </Link>
+              <Hydrawav3Logo />
             </div>
 
             {/* Role selector */}
@@ -126,24 +122,24 @@ export default function LoginPage() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={isProfessional}
-                onClick={() => setRole("professional")}
+                aria-selected={isPractitioner}
+                onClick={() => setRole("practitioner")}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-[9px] px-3 py-2.5 text-[12.5px] font-semibold transition-all ${
-                  isProfessional
+                  isPractitioner
                     ? "bg-[#C97A56] text-white shadow-[0_8px_24px_-12px_rgba(201,122,86,0.8)]"
                     : "text-white/55 hover:text-white/80"
                 }`}
               >
                 <Stethoscope className="h-4 w-4" />
-                Professional
+                Practitioner
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected={!isProfessional}
+                aria-selected={!isPractitioner}
                 onClick={() => setRole("client")}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-[9px] px-3 py-2.5 text-[12.5px] font-semibold transition-all ${
-                  !isProfessional
+                  !isPractitioner
                     ? "bg-[#C97A56] text-white shadow-[0_8px_24px_-12px_rgba(201,122,86,0.8)]"
                     : "text-white/55 hover:text-white/80"
                 }`}
@@ -153,17 +149,21 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {isProfessional ? <ProfessionalForm /> : <ClientForm />}
+            {isPractitioner ? (
+              <PractitionerForm />
+            ) : (
+              <ClientForm />
+            )}
 
             <div className="mt-6 flex items-center justify-center gap-2 rounded-full bg-[#1A7A45]/20 px-3 py-1.5 text-[12px] text-[#34d399]">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              {isProfessional
+              {isPractitioner
                 ? "All systems operational · Last sync 2 min ago"
                 : "Secure patient portal · End-to-end encrypted"}
             </div>
 
             <p className="mt-6 text-center text-[12px] text-white/40">
-              {isProfessional ? (
+              {isPractitioner ? (
                 <>
                   Don&apos;t have an account?{" "}
                   <Link href="#" className="font-medium text-[#C97A56] hover:text-[#D4825E]">
@@ -186,12 +186,12 @@ export default function LoginPage() {
   )
 }
 
-function ProfessionalForm() {
+function PractitionerForm() {
   return (
     <div className="rounded-[16px] border border-white/[0.06] bg-[#1A2E3B]/80 p-7 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-xl">
       <div className="mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#C97A56]">
-          Professional sign in
+          Practitioner sign in
         </p>
         <h1 className="mt-2 text-[24px] font-semibold tracking-tight">
           Sign in to your clinic dashboard.
@@ -253,7 +253,7 @@ function ProfessionalForm() {
         </label>
 
         <Link
-          href="/dashboard"
+          href="/"
           className="group mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-[#C97A56] text-[14px] font-semibold text-white shadow-[0_10px_30px_-10px_rgba(201,122,86,0.7)] transition-colors hover:bg-[#B86A48]"
         >
           Sign in to workspace
@@ -290,7 +290,9 @@ function ClientForm() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#C97A56]">
           Client sign in
         </p>
-        <h1 className="mt-2 text-[24px] font-semibold tracking-tight">Welcome back.</h1>
+        <h1 className="mt-2 text-[24px] font-semibold tracking-tight">
+          Welcome back.
+        </h1>
         <p className="mt-1.5 text-[13px] text-white/55">
           View your progress, results, and prescribed exercises.
         </p>

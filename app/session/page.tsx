@@ -1,4 +1,7 @@
-import Link from "next/link"
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   Activity,
   AlertTriangle,
@@ -18,24 +21,50 @@ import {
   Wind,
 } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
+import { useActiveSession, useElapsed } from "@/lib/active-session"
 
 export default function SessionPage() {
+  const router = useRouter()
+  const { session, startSession, endSession, ready } = useActiveSession()
+  const elapsed = useElapsed(session?.startedAt)
+
+  useEffect(() => {
+    if (!ready) return
+    if (!session) {
+      startSession({
+        patientId: "alex-morgan",
+        patientName: "Alex Morgan",
+        protocol: "H3-Beta · 18 min",
+        room: "Room 2",
+      })
+    }
+  }, [ready, session, startSession])
+
+  const patientName = session?.patientName ?? "Alex Morgan"
+  const protocolLabel = session?.protocol ?? "H3-Beta · 18 min"
+
+  const handleEnd = () => {
+    endSession()
+    router.push("/results")
+  }
+
   return (
     <AppShell
-      title="Live session · Alex Morgan"
+      title={`Live session · ${patientName}`}
       breadcrumbs={[
-        { label: "Patients" },
-        { label: "Alex Morgan" },
-        { label: "H3-Beta" },
+        { label: "Patients", href: "/patients" },
+        { label: patientName },
+        { label: protocolLabel.split(" · ")[0] },
       ]}
       actions={
-        <Link
-          href="/results"
+        <button
+          type="button"
+          onClick={handleEnd}
           className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#E74C3C] px-4 text-[13px] font-semibold text-white hover:bg-[#c0392b]"
         >
           <Square className="h-3.5 w-3.5 fill-white" />
           End session
-        </Link>
+        </button>
       }
     >
       <div className="grid gap-6 lg:grid-cols-[1.7fr_1fr]">
@@ -76,7 +105,7 @@ export default function SessionPage() {
               </span>
               <div className="mt-2 flex items-baseline gap-2 font-mono">
                 <span className="text-[64px] font-semibold leading-none tabular-nums">
-                  07:42
+                  {elapsed}
                 </span>
                 <span className="text-[18px] text-white/40 tabular-nums">/ 18:00</span>
               </div>
@@ -316,13 +345,14 @@ export default function SessionPage() {
           </div>
 
           {/* Finish button */}
-          <Link
-            href="/results"
+          <button
+            type="button"
+            onClick={handleEnd}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-[#1F2937] text-[13px] font-semibold text-white hover:bg-[#0F1E28]"
           >
             <Play className="h-4 w-4 rotate-90" />
             Complete early &amp; review
-          </Link>
+          </button>
         </section>
       </div>
     </AppShell>

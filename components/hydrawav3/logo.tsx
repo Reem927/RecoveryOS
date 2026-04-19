@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils"
 
-export function RecoveryOSLogo({
+export function Hydrawav3Logo({
   className,
   showWordmark = true,
   tone = "light",
-  subtitle = "Professional",
+  subtitle = "Practitioner",
 }: {
   className?: string
   showWordmark?: boolean
@@ -42,7 +42,7 @@ export function RecoveryOSLogo({
       {showWordmark && (
         <div className="flex flex-col leading-none">
           <span className={cn("text-[15px] font-semibold tracking-tight", textColor)}>
-            Recovery<span className="text-[#C97A56]">OS</span>
+            Hydrawav<span className="text-[#C97A56]">3</span>
           </span>
           {subtitle ? (
             <span
