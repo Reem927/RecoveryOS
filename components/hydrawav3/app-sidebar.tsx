@@ -11,12 +11,15 @@ import {
   Settings,
   LifeBuoy,
   Sparkles,
+  PlayCircle,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Hydrawav3Logo } from "./logo"
 
 const primaryNav = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Session Setup", href: "/session-setup", icon: PlayCircle },
   { label: "Patients", href: "/patients/alex-morgan", icon: Users },
   { label: "Assessments", href: "/assessment", icon: ClipboardCheck },
   { label: "Live Session", href: "/session", icon: Activity },
@@ -34,7 +37,8 @@ export function AppSidebar() {
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/"
     if (href.startsWith("/patients")) return pathname.startsWith("/patients")
-    return pathname.startsWith(href)
+    if (href === "/session") return pathname === "/session" || pathname.startsWith("/session/")
+    return pathname === href || pathname.startsWith(href + "/")
   }
 
   return (
@@ -115,13 +119,28 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <div
             aria-hidden
-            className="h-9 w-9 rounded-full bg-gradient-to-br from-[#C97A56] to-[#8b4a2e] ring-2 ring-white/10"
+            className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-[#C97A56] to-[#8b4a2e] ring-2 ring-white/10"
           />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-semibold text-white">Dr. Elena Ruiz</div>
             <div className="truncate text-[11px] text-white/50">Lead practitioner</div>
           </div>
+          <Link
+            href="/login"
+            aria-label="Log out"
+            title="Log out"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-white/10 bg-white/[0.03] text-white/60 transition-colors hover:border-[#C97A56]/40 hover:bg-[#C97A56]/10 hover:text-[#C97A56] focus:outline-none focus:ring-2 focus:ring-[#C97A56]/40"
+          >
+            <LogOut className="h-4 w-4" />
+          </Link>
         </div>
+        <Link
+          href="/login"
+          className="mt-3 flex items-center justify-center gap-2 rounded-[8px] border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] font-medium text-white/60 transition-colors hover:border-white/10 hover:bg-white/[0.05] hover:text-white"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Log out
+        </Link>
       </div>
     </aside>
   )

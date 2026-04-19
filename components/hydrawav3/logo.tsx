@@ -4,10 +4,12 @@ export function Hydrawav3Logo({
   className,
   showWordmark = true,
   tone = "light",
+  subtitle = "Practitioner",
 }: {
   className?: string
   showWordmark?: boolean
   tone?: "light" | "dark"
+  subtitle?: string | null
 }) {
   const textColor = tone === "light" ? "text-white" : "text-[#1F2937]"
   return (
@@ -42,9 +44,16 @@ export function Hydrawav3Logo({
           <span className={cn("text-[15px] font-semibold tracking-tight", textColor)}>
             Hydrawav<span className="text-[#C97A56]">3</span>
           </span>
-          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
-            Practitioner
-          </span>
+          {subtitle ? (
+            <span
+              className={cn(
+                "mt-0.5 text-[10px] font-medium uppercase tracking-[0.14em]",
+                tone === "light" ? "text-white/40" : "text-[#9CA3AF]",
+              )}
+            >
+              {subtitle}
+            </span>
+          ) : null}
         </div>
       )}
     </div>
