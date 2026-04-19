@@ -11,8 +11,10 @@ next.user-config.*
 .env*.local
 .env
 .env.local
+/supabase
 
 # Common ignores
 node_modules
 .next/
-.DS_Store.worktrees/
+.DS_Store
+.worktrees/
