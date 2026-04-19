@@ -459,6 +459,38 @@ export function advanceSession(
   }
 }
 
+// Sequential exercise order (fixed 1→2→3→4→5)
+export const EXERCISE_ORDER: ExerciseId[] = [
+  "bodyweight_squat",
+  "reverse_lunge",
+  "single_leg_balance",
+  "hip_hinge",
+  "calf_raise",
+]
+
+export function getSequentialNextExercise(current: ExerciseId): ExerciseId | null {
+  const index = EXERCISE_ORDER.indexOf(current)
+  if (index === -1) return null
+  return EXERCISE_ORDER[index + 1] ?? null
+}
+
+export function advanceSessionSequential(
+  session: AssessmentSession,
+  performance: ExercisePerformance
+): AssessmentSession {
+  const updatedPerformances = [...session.performances, performance]
+  const nextExercise = getSequentialNextExercise(session.currentExercise)
+  const muscleScores = computeMuscleScores(updatedPerformances)
+
+  return {
+    currentExercise: nextExercise ?? session.currentExercise,
+    completedExercises: [...session.completedExercises, session.currentExercise],
+    performances: updatedPerformances,
+    isComplete: nextExercise === null,
+    muscleScores,
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CV Angle Utilities (used by MediaPipe landmark processing)
 // ─────────────────────────────────────────────────────────────────────────────

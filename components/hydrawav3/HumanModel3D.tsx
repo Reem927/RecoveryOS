@@ -1,8 +1,8 @@
 "use client"
 
-import dynamic from "next/dynamic"
-import { useRef } from "react"
+import { useRef, Suspense } from "react"
 import { useFrame } from "@react-three/fiber"
+import { Canvas } from "@react-three/fiber"
 import { OrbitControls } from "@react-three/drei"
 import * as THREE from "three"
 
@@ -36,38 +36,42 @@ const BL = {
 type ExId = "bodyweight_squat"|"reverse_lunge"|"single_leg_balance"|"hip_hinge"|"calf_raise"
 
 interface PF {
-  lHipFlex: number; rHipFlex: number
-  lKneeFlex: number; rKneeFlex: number
-  trunkFlex: number; heelRise: number
-  lArm: number; rArm: number
+  lHipFlex: number
+  rHipFlex: number
+  lKneeFlex: number
+  rKneeFlex: number
+  trunkFlex: number
+  heelRise: number
+  pelvisDrop: number
+  lArm: number
+  rArm: number
 }
 
 const POSES: Record<ExId, { s: PF; p: PF; spd: number }> = {
   bodyweight_squat: {
-    // squat: hips rotate BACK (+), knees bend forward (-), trunk forward (+)
-    s: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0, lArm:0.05, rArm:0.05 },
-    p: { lHipFlex:0.85, rHipFlex:0.85, lKneeFlex:1.35, rKneeFlex:1.35, trunkFlex:0.20, heelRise:0, lArm:0.35, rArm:0.35 },
-    spd: 0.8,
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
+    p: { lHipFlex: 0.65, rHipFlex: 0.65, lKneeFlex: 1.05, rKneeFlex: 1.05, trunkFlex: 0.28, heelRise: 0, pelvisDrop: 0.28, lArm: 0.45, rArm: 0.45 },
+    spd: 0.9,
   },
   reverse_lunge: {
-    s: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0, lArm:0.05, rArm:0.05 },
-    p: { lHipFlex:0.80, rHipFlex:-0.3, lKneeFlex:1.25, rKneeFlex:1.30, trunkFlex:0.05, heelRise:0, lArm:0.1, rArm:0.1 },
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
+    p: { lHipFlex: 0.65, rHipFlex: -0.35, lKneeFlex: 1.05, rKneeFlex: 1.15, trunkFlex: 0.12, heelRise: 0, pelvisDrop: 0.22, lArm: 0.18, rArm: 0.18 },
     spd: 0.75,
   },
   single_leg_balance: {
-    s: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0, lArm:0.1, rArm:0.1 },
-    p: { lHipFlex:0, rHipFlex:0.75, lKneeFlex:0, rKneeFlex:1.10, trunkFlex:0, heelRise:0, lArm:0.55, rArm:0.55 },
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.15, rArm: 0.15 },
+    p: { lHipFlex: 0, rHipFlex: 0.85, lKneeFlex: 0, rKneeFlex: 1.0, trunkFlex: 0.02, heelRise: 0, pelvisDrop: 0, lArm: 0.65, rArm: 0.65 },
     spd: 0.45,
   },
   hip_hinge: {
-    s: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0, lArm:0, rArm:0 },
-    p: { lHipFlex:0.78, rHipFlex:0.78, lKneeFlex:0.22, rKneeFlex:0.22, trunkFlex:0.90, heelRise:0, lArm:-0.2, rArm:-0.2 },
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0, rArm: 0 },
+    p: { lHipFlex: 0.25, rHipFlex: 0.25, lKneeFlex: 0.18, rKneeFlex: 0.18, trunkFlex: 0.85, heelRise: 0, pelvisDrop: 0.04, lArm: -0.15, rArm: -0.15 },
     spd: 0.7,
   },
   calf_raise: {
-    s: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0, lArm:0.05, rArm:0.05 },
-    p: { lHipFlex:0, rHipFlex:0, lKneeFlex:0, rKneeFlex:0, trunkFlex:0, heelRise:0.17, lArm:0.05, rArm:0.05 },
-    spd: 1.1,
+    s: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
+    p: { lHipFlex: 0, rHipFlex: 0, lKneeFlex: 0, rKneeFlex: 0, trunkFlex: 0, heelRise: 0.17, pelvisDrop: 0, lArm: 0.05, rArm: 0.05 },
+    spd: 1.0,
   },
 }
 
@@ -91,27 +95,26 @@ function AnimatedHuman({ exerciseId }: { exerciseId: string }) {
 
   useFrame((_, dt) => {
     clock.current += dt * pose.spd
-    const e = ease((Math.sin(clock.current) + 1) / 2)
-    const v = (k: keyof PF) => lp(pose.s[k], pose.p[k], e)
 
-    // Apply squat motion: alternating signs for natural motion
-    const anim = ease((Math.sin(clock.current) * pose.spd + 1) / 2)
-    
-    // hip: POSITIVE = rotate legs BACK (sitting back)
-    if (lHipRef.current)   lHipRef.current.rotation.x   = v("lHipFlex") * anim
-    if (rHipRef.current)   rHipRef.current.rotation.x   = v("rHipFlex") * anim
-    
-    // knee: NEGATIVE = rotate shins FORWARD (knees over toes) - OPPOSITE direction
-    if (lKneeRef.current)  lKneeRef.current.rotation.x  = -v("lKneeFlex") * anim
-    if (rKneeRef.current)  rKneeRef.current.rotation.x  = -v("rKneeFlex") * anim
-    
-    // trunk: POSITIVE = lean forward (balance)
-    if (trunkRef.current)  trunkRef.current.rotation.x  = v("trunkFlex") * anim
-    // Arms
-    if (lArmRef.current)   lArmRef.current.rotation.z   =  v("lArm")
-    if (rArmRef.current)   rArmRef.current.rotation.z   = -v("rArm")
-    // Heel rise: whole body up
-    if (rootRef.current)   rootRef.current.position.y   =  v("heelRise")
+    const raw = (Math.sin(clock.current) + 1) / 2
+    const t = ease(Math.max(0, Math.min(1, raw)))
+
+    const v = (k: keyof PF) => lp(pose.s[k], pose.p[k], t)
+
+    if (lHipRef.current) lHipRef.current.rotation.x = v("lHipFlex")
+    if (rHipRef.current) rHipRef.current.rotation.x = v("rHipFlex")
+
+    if (lKneeRef.current) lKneeRef.current.rotation.x = -v("lKneeFlex")
+    if (rKneeRef.current) rKneeRef.current.rotation.x = -v("rKneeFlex")
+
+    if (trunkRef.current) trunkRef.current.rotation.x = v("trunkFlex")
+
+    if (lArmRef.current) lArmRef.current.rotation.z = v("lArm")
+    if (rArmRef.current) rArmRef.current.rotation.z = -v("rArm")
+
+    if (rootRef.current) {
+      rootRef.current.position.y = v("heelRise") - v("pelvisDrop")
+    }
   })
 
   const sk = "#C4956A"; const jt = "#C97A56"; const dk = "#9E7248"
@@ -256,7 +259,6 @@ function AnimatedHuman({ exerciseId }: { exerciseId: string }) {
 }
 
 function HumanModel3DInner({ exerciseId }: { exerciseId: string }) {
-  const { Canvas } = require("@react-three/fiber") as any
   return (
     <Canvas
       camera={{ position: [-3.2, 0.85, 0.3], fov: 44, near: 0.1, far: 100 }}
@@ -281,13 +283,20 @@ function HumanModel3DInner({ exerciseId }: { exerciseId: string }) {
   )
 }
 
-const HumanModel3D = dynamic(
-  () => Promise.resolve(HumanModel3DInner),
-  { ssr: false, loading: () => (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C97A56] border-t-transparent" />
-    </div>
-  )}
-)
+function HumanModel3DWithSuspense({ exerciseId }: { exerciseId: string }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C97A56] border-t-transparent" />
+        </div>
+      }
+    >
+      <HumanModel3DInner exerciseId={exerciseId} />
+    </Suspense>
+  )
+}
+
+const HumanModel3D = HumanModel3DWithSuspense
 
 export default HumanModel3D

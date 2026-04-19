@@ -10,7 +10,7 @@ import {
   EXERCISES,
   ExercisePerformance, AssessmentSession, ExerciseId,
   angleBetweenPoints, computeSymmetryScore,
-  createSession, advanceSession, MEDIAPIPE_LANDMARKS, MuscleScore,
+  createSession, advanceSession, advanceSessionSequential, MEDIAPIPE_LANDMARKS, MuscleScore,
 } from "@/lib/leg-assessment-engine"
 import dynamic from "next/dynamic"
 
@@ -485,7 +485,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
       timestamp: Date.now(),
     }
 
-    const newSession = advanceSession(sessionRef.current, perf)
+    const newSession = mode === "client"
+      ? advanceSessionSequential(sessionRef.current, perf)
+      : advanceSession(sessionRef.current, perf)
     sessionRef.current = newSession
     setSession(newSession)
 
