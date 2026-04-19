@@ -7,26 +7,7 @@ import { z } from "zod"
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
 import { getCurrentPractitioner } from "@/lib/auth/current-practitioner"
-
-// =============================================================
-// Types / schemas
-// =============================================================
-
-export const PRACTITIONER_TITLES = [
-  "PT",  // Physical Therapist
-  "DC",  // Doctor of Chiropractic
-  "OT",  // Occupational Therapist
-  "ATC", // Athletic Trainer, Certified
-  "DPT", // Doctor of Physical Therapy
-  "CSCS",// Certified Strength and Conditioning Specialist
-  "Other",
-] as const
-
-export const CLINIC_TYPES = [
-  { value: "pt_chiro", label: "Physical Therapists & Chiropractors" },
-  { value: "sports_rehab", label: "Sports Rehabilitation Center" },
-  { value: "athletic_center", label: "High-Performance Athletic Center" },
-] as const
+import { PRACTITIONER_TITLES, CLINIC_TYPES } from "./constants"
 
 const AccountInfoSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required").max(80),
