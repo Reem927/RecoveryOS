@@ -266,13 +266,13 @@ function NotificationsSection() {
           onChange={(v) => setEmail((s) => ({ ...s, apptReminders: v }))}
         />
         <ToggleItem
-          title="Weekly patient summary"
+          title="Weekly client summary"
           description="Progress roll-up every Monday."
           checked={email.weeklySummary}
           onChange={(v) => setEmail((s) => ({ ...s, weeklySummary: v }))}
         />
         <ToggleItem
-          title="New patient intake"
+          title="New client intake"
           description="When a new client completes the intake form."
           checked={email.newPatientIntake}
           onChange={(v) => setEmail((s) => ({ ...s, newPatientIntake: v }))}
@@ -303,7 +303,7 @@ function NotificationsSection() {
         />
         <ToggleItem
           title="Team mentions"
-          description="When a teammate tags you on a patient note."
+          description="When a teammate tags you on a client note."
           checked={push.mentions}
           onChange={(v) => setPush((s) => ({ ...s, mentions: v }))}
         />
@@ -614,7 +614,7 @@ function DataSection() {
         <InfoRow
           icon={Download}
           title="Export data"
-          description="Download a full copy of your patient data, sessions, and notes."
+          description="Download a full copy of your client data, sessions, and notes."
           action={
             <button className="inline-flex h-9 items-center gap-1.5 rounded-[9px] border border-black/[0.07] bg-white px-3 text-[12.5px] font-medium text-[#374151] hover:border-black/10">
               Request export
@@ -648,7 +648,7 @@ function DataSection() {
           <div className="flex-1">
             <div className="text-[13.5px] font-semibold text-[#1F2937]">Delete workspace</div>
             <div className="mt-0.5 text-[12px] text-[#6B7280]">
-              Permanently removes all patient records, sessions, and team members after a 30-day
+              Permanently removes all client records, sessions, and team members after a 30-day
               grace period. This cannot be undone.
             </div>
           </div>

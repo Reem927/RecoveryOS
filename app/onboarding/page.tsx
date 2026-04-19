@@ -15,7 +15,7 @@ const FEATURES = [
   {
     icon: Users,
     title: "Multi-practitioner clinics",
-    body: "Shared patient charts, coordinated follow-ups, one workspace.",
+    body: "Shared client charts, coordinated follow-ups, one workspace.",
   },
 ]
 

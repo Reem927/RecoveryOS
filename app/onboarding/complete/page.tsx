@@ -20,7 +20,7 @@ export default function OnboardingCompletePage() {
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-white/55">
           Your practitioner profile is ready. Head to your dashboard to start
-          scheduling sessions and tracking patient recovery.
+          scheduling sessions and tracking client recovery.
         </p>
 
         <div className="mt-10 space-y-3">

@@ -351,7 +351,7 @@ export default function AppointmentsPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search patient or reason…"
+                  placeholder="Search client or reason…"
                   className="h-9 w-72 rounded-[9px] border border-black/[0.08] bg-white pl-8 pr-3 text-[12.5px] text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/15"
                 />
               </div>
@@ -614,7 +614,7 @@ function BookingModal({
         </div>
 
         <div className="space-y-4 px-5 py-5">
-          <Field label="Patient">
+          <Field label="Client">
             <div className="relative">
               <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
               <select

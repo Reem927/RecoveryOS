@@ -44,7 +44,7 @@ export default function AssessmentPage() {
     <AppShell
       title="Pre-check · Alex Morgan"
       breadcrumbs={[
-        { label: "Patients" },
+        { label: "Clients" },
         { label: "Alex Morgan" },
         { label: "Pre-check" },
       ]}

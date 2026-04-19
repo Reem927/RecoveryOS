@@ -10,7 +10,7 @@ export default function ClientScanLayout({ children }: { children: React.ReactNo
           <div className="flex items-center gap-3">
             <Hydrawav3Logo subtitle={null} />
             <span className="hidden rounded-full bg-white/[0.06] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/70 sm:inline-flex">
-              Patient portal
+              Client portal
             </span>
           </div>
 

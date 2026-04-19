@@ -32,11 +32,12 @@ export default function LoginPage() {
           forceRedirectUrl="/dashboard"
           appearance={{
             elements: {
-              card: "rounded-2xl shadow-2xl border border-white/10",
-              headerTitle: "text-[#162532]",
+              card: "rounded-2xl shadow-2xl border border-white/10 w-full",
+              header: "hidden",
               formButtonPrimary:
                 "bg-[#C97A56] hover:bg-[#B86A48] text-white shadow-none",
               footerActionLink: "text-[#C97A56] hover:text-[#B86A48]",
+              rootBox: "w-full",
             },
           }}
         />

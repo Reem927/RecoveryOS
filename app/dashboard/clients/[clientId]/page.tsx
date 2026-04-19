@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { ChevronDown, ChevronUp, ClipboardList, Plus } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, ClipboardList, Mail, Plus } from "lucide-react"
 import { AppShell } from "@/components/hydrawav3/app-shell"
 import { RecoveryAssistantChat, type AssessmentSummary } from "@/components/recovery-assistant-chat"
 import { Badge } from "@/components/ui/badge"
@@ -66,7 +66,11 @@ export default function ClientDashboardPage() {
   const clientId = params.clientId as string
 
   const [clientName, setClientName] = useState("Client")
+  const [clientEmail, setClientEmail] = useState<string | null>(null)
   const [lastSession, setLastSession] = useState<string | null>(null)
+  const [sendingFollowUp, setSendingFollowUp] = useState(false)
+  const [followUpSent, setFollowUpSent] = useState(false)
+  const [followUpMessage, setFollowUpMessage] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [assessmentId, setAssessmentId] = useState<string | undefined>()
@@ -84,22 +88,37 @@ export default function ClientDashboardPage() {
     sleepScore: "",
   })
 
-  // Load patient info
   useEffect(() => {
-    async function loadPatient() {
+    async function loadClient() {
       const res = await fetch(`/api/clients/${clientId}`)
-      if (res.ok) {
-        const data = await res.json()
-        setClientName(data.full_name ?? "Client")
-        setLastSession(data.latest_assessment?.created_at
-          ? new Date(data.latest_assessment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-          : null)
-      }
+      if (!res.ok) return
+      const data = await res.json()
+      setClientName(data.full_name ?? "Client")
+      setClientEmail(data.email ?? null)
+      setLastSession(data.latest_assessment?.created_at
+        ? new Date(data.latest_assessment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : null)
     }
-    loadPatient().catch(() => {
-      // patient API may not exist yet — use placeholder
-    })
+    loadClient()
   }, [clientId])
+
+  async function sendFollowUp() {
+    setSendingFollowUp(true)
+    try {
+      const res = await fetch("/api/followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, assessmentId }),
+      })
+      if (res.ok) {
+        const { message } = await res.json()
+        setFollowUpSent(true)
+        setFollowUpMessage(message)
+      }
+    } finally {
+      setSendingFollowUp(false)
+    }
+  }
 
   function toggleGoal(goal: string) {
     setForm((prev) => ({
@@ -337,6 +356,67 @@ export default function ClientDashboardPage() {
               </Button>
             </CardContent>
           )}
+        </Card>
+
+        {/* Email Follow-up Card */}
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardHeader className="pb-3 pt-4">
+            <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-blue-400" />
+              Email Follow-up
+              {clientEmail ? (
+                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs ml-2" variant="outline">
+                  {clientEmail}
+                </Badge>
+              ) : (
+                <Badge className="bg-zinc-700 text-zinc-400 border-zinc-600 text-xs ml-2" variant="outline">
+                  No email on file
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-5 space-y-4">
+            {!clientEmail ? (
+              <p className="text-xs text-zinc-400">
+                Add an email address to {clientName}&apos;s profile to enable follow-up emails.
+              </p>
+            ) : followUpSent && followUpMessage ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs text-emerald-400">
+                  <Check className="w-3.5 h-3.5" />
+                  Email sent to {clientEmail}
+                </div>
+                <p className="text-xs text-zinc-400 bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 italic leading-relaxed">
+                  &ldquo;{followUpMessage}&rdquo;
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs"
+                  onClick={() => { setFollowUpSent(false); setFollowUpMessage(null) }}
+                >
+                  Send another
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-zinc-400">
+                  {assessmentSummary
+                    ? `Claude will write a personalised recovery follow-up for ${clientName} based on today's assessment and send it to their email.`
+                    : `Claude will write a wellness check-in for ${clientName} and send it to their email.`}
+                </p>
+                <Button
+                  size="sm"
+                  onClick={sendFollowUp}
+                  disabled={sendingFollowUp}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
+                >
+                  <Mail className="w-3.5 h-3.5 mr-1.5" />
+                  {sendingFollowUp ? "Sending…" : assessmentSummary ? "Send Post-Session Follow-up" : "Send Wellness Check-in"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         {/* Recovery Assistant Chat */}

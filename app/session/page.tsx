@@ -47,7 +47,7 @@ export default function SessionPage() {
     <AppShell
       title={`Live session · ${patientName}`}
       breadcrumbs={[
-        { label: "Patients", href: "/patients" },
+        { label: "Clients", href: "/patients" },
         { label: patientName },
         { label: protocolLabel.split(" · ")[0] },
       ]}
@@ -318,7 +318,7 @@ export default function SessionPage() {
             </div>
             <textarea
               rows={3}
-              defaultValue="Patient reports mild warmth at 04:30 mark. Comfortable. Breathing settled into 11 rpm coherent pattern by minute 6."
+              defaultValue="Client reports mild warmth at 04:30 mark. Comfortable. Breathing settled into 11 rpm coherent pattern by minute 6."
               className="w-full resize-none rounded-[8px] border border-black/[0.08] bg-white px-3 py-2 text-[12px] text-[#1F2937] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/20"
             />
             <button className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[8px] border border-black/[0.07] bg-white text-[12px] font-medium text-[#374151] hover:border-black/10">

@@ -17,7 +17,7 @@ export default function ScanPage() {
     <AppShell
       title="Camera scan · Alex Morgan"
       breadcrumbs={[
-        { label: "Patients" },
+        { label: "Clients" },
         { label: "Alex Morgan" },
         { label: "Scan" },
       ]}

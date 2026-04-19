@@ -52,7 +52,7 @@ export default function AccountInfoPage() {
             Set up your account
           </h2>
           <p className="mt-2 text-[13px] leading-relaxed text-white/45">
-            Your name and title appear on patient notes and clinic records.
+            Your name and title appear on client notes and clinic records.
           </p>
           <div className="mt-10">
             <StepIndicator current={1} />
@@ -80,7 +80,7 @@ export default function AccountInfoPage() {
               Your details
             </h1>
             <p className="mt-1 text-[14px] text-white/45">
-              How you&apos;ll appear to your clinic and patients.
+              How you&apos;ll appear to your clinic and clients.
             </p>
           </div>
 

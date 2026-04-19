@@ -69,7 +69,7 @@ export default function ResultsPage() {
     <AppShell
       title="Session complete · Alex Morgan"
       breadcrumbs={[
-        { label: "Patients" },
+        { label: "Clients" },
         { label: "Alex Morgan" },
         { label: "Results" },
       ]}
@@ -183,7 +183,7 @@ export default function ResultsPage() {
               Book H3-Beta + scapular focus in 3 days
             </h3>
             <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
-              Patients with this response curve typically consolidate symmetry gains with one
+              Clients with this response curve typically consolidate symmetry gains with one
               more H3-Beta, then shift to H3-Gamma to challenge the restored range.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -193,7 +193,7 @@ export default function ResultsPage() {
               </button>
               <button className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-black/[0.07] bg-white px-3 text-[13px] font-medium text-[#374151] hover:border-black/10">
                 <Share2 className="h-4 w-4 text-[#C97A56]" />
-                Send recap to patient
+                Send recap to client
               </button>
             </div>
           </div>
@@ -314,7 +314,7 @@ export default function ResultsPage() {
               </p>
               <textarea
                 rows={5}
-                defaultValue="Excellent tolerance. Patient reports ‘loose, not sore’ post-session. Continue H3-Beta for one more cycle, then reassess for Gamma. Home mobility: external rotation banded, 3×12 daily."
+                defaultValue="Excellent tolerance. Client reports ‘loose, not sore’ post-session. Continue H3-Beta for one more cycle, then reassess for Gamma. Home mobility: external rotation banded, 3×12 daily."
                 className="mt-3 w-full resize-none rounded-[8px] border border-black/[0.08] bg-white px-3 py-2 text-[12px] text-[#1F2937] focus:border-[#C97A56]/40 focus:outline-none focus:ring-2 focus:ring-[#C97A56]/20"
               />
               <div className="mt-3 flex items-center justify-between">
@@ -328,7 +328,7 @@ export default function ResultsPage() {
 
             <div className="rounded-[12px] border border-black/[0.07] bg-white p-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-                Patient communication
+                Client communication
               </p>
               <div className="mt-3 space-y-2 text-[12px]">
                 <label className="flex cursor-pointer items-center gap-2">

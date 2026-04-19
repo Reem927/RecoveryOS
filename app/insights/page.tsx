@@ -124,7 +124,7 @@ function InsightsContent() {
     <AppShell
       title="Recovery insights · Alex Morgan"
       breadcrumbs={[
-        { label: "Patients" },
+        { label: "Clients" },
         { label: "Alex Morgan" },
         { label: "Insights" },
       ]}
@@ -270,7 +270,7 @@ function InsightsContent() {
               </ul>
 
               <div className="mt-5 rounded-[10px] border border-dashed border-[#C97A56]/30 bg-[#C97A56]/6 p-3 text-[12px] leading-relaxed text-[#8c4e32]">
-                <span className="font-semibold text-[#C97A56]">Why this protocol:</span> patients
+                <span className="font-semibold text-[#C97A56]">Why this protocol:</span> clients
                 with ≤ 10% asymmetry and HRV &gt; 55 ms respond 34% better to H3-Beta than
                 H3-Alpha over 4 sessions.
               </div>

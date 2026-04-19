@@ -56,7 +56,7 @@ export default async function PatientDetailPage({
     <AppShell
       title={patient.name}
       breadcrumbs={[
-        { label: "Patients", href: "/patients" },
+        { label: "Clients", href: "/patients" },
         { label: patient.name },
       ]}
       actions={
@@ -75,7 +75,7 @@ export default async function PatientDetailPage({
           className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[#6B7280] transition-colors hover:text-[#C97A56]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          All patients
+          All clients
         </Link>
 
         {/* Patient header */}
@@ -217,7 +217,7 @@ export default async function PatientDetailPage({
                   No trend data yet
                 </p>
                 <p className="mt-1 max-w-xs text-[12px] text-[#6B7280]">
-                  Complete the first pre-session assessment to start tracking this patient&apos;s recovery.
+                  Complete the first pre-session assessment to start tracking this client&apos;s recovery.
                 </p>
               </div>
             )}

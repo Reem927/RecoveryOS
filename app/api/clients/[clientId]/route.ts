@@ -14,7 +14,7 @@ export async function GET(
   const supabase = createAdminSupabaseClient()
   const { data: client, error } = await supabase
     .from("patients")
-    .select("id, full_name, email, phone, focus_region, dob, intake, created_at")
+    .select("id, full_name, email, phone, focus_region, dob, intake, created_at, telegram_chat_id")
     .eq("id", params.clientId)
     .eq("clinic_id", practitioner.clinic_id)
     .maybeSingle()
@@ -30,5 +30,9 @@ export async function GET(
     .limit(1)
     .maybeSingle()
 
-  return NextResponse.json({ ...client, latest_assessment: latestAssessment ?? null })
+  return NextResponse.json({
+    ...client,
+    telegram_connected: Boolean(client.telegram_chat_id),
+    latest_assessment: latestAssessment ?? null,
+  })
 }

@@ -115,16 +115,16 @@ export default function PatientsListPage() {
 
   return (
     <AppShell
-      title="Patients"
+      title="Clients"
       eyebrow="Caseload · All clinics"
-      breadcrumbs={[{ label: "Patients" }]}
+      breadcrumbs={[{ label: "Clients" }]}
       actions={
         <Link
           href="/session-setup"
           className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 text-[13px] font-semibold text-white shadow-[0_8px_20px_-10px_rgba(201,122,86,0.7)] hover:bg-[#B86A48]"
         >
           <Plus className="h-4 w-4" />
-          New patient
+          New client
         </Link>
       }
     >
@@ -210,7 +210,7 @@ export default function PatientsListPage() {
 
           {/* Table */}
           <div className="hidden grid-cols-[1.4fr_1.2fr_0.9fr_0.9fr_1.1fr_0.3fr] items-center gap-4 border-b border-black/[0.05] px-5 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF] md:grid">
-            <div>Patient</div>
+            <div>Client</div>
             <div>Focus</div>
             <div>Recovery</div>
             <div>Trend</div>
@@ -223,7 +223,7 @@ export default function PatientsListPage() {
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-[10px] bg-[#F2EDE6]">
                 <Users className="h-5 w-5 text-[#C97A56]" />
               </div>
-              <p className="text-[14px] font-medium text-[#1F2937]">No patients match</p>
+              <p className="text-[14px] font-medium text-[#1F2937]">No clients match</p>
               <p className="mt-1 text-[12.5px] text-[#6B7280]">
                 Try clearing filters or a different search term.
               </p>
@@ -304,7 +304,7 @@ export default function PatientsListPage() {
           {filtered.length > 0 && (
             <div className="flex items-center justify-between border-t border-black/[0.05] px-5 py-3 text-[12px] text-[#6B7280]">
               <span>
-                Showing {filtered.length} of {patients.length} patients
+                Showing {filtered.length} of {patients.length} clients
               </span>
               <Link
                 href="/session-setup"

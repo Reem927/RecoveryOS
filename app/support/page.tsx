@@ -25,7 +25,7 @@ const faqs = [
     items: [
       {
         q: "How do I start a live session?",
-        a: "From the dashboard, click 'New session' or use 'Session Setup' in the sidebar. Select a patient, choose a protocol, and hit 'Start Live Session'. The session will appear in the sidebar once active.",
+        a: "From the dashboard, click 'New session' or use 'Session Setup' in the sidebar. Select a client, choose a protocol, and hit 'Start Live Session'. The session will appear in the sidebar once active.",
       },
       {
         q: "Why does the timer keep running after I end a session?",
@@ -42,16 +42,16 @@ const faqs = [
     ],
   },
   {
-    category: "Patients",
+    category: "Clients",
     icon: HeartPulse,
     items: [
       {
-        q: "How do I add a new patient?",
-        a: "Go to the Patients tab and click 'New patient' in the top right. Fill in their intake details and recovery baseline to unlock protocol recommendations.",
+        q: "How do I add a new client?",
+        a: "Go to the Clients tab and click 'New client' in the top right. Fill in their intake details and recovery baseline to unlock protocol recommendations.",
       },
       {
-        q: "Where can I view a patient's recovery trend?",
-        a: "Open any patient's profile from the Patients list. The Recovery Trend chart shows session-over-session score deltas across the last 8 weeks.",
+        q: "Where can I view a client's recovery trend?",
+        a: "Open any client's profile from the Clients list. The Recovery Trend chart shows session-over-session score deltas across the last 8 weeks.",
       },
     ],
   },
