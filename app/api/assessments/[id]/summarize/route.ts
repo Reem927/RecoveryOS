@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { auth } from "@clerk/nextjs/server"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
+import { summarizeLimiter, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { userId } = await auth()
+  const identifier = userId ?? req.headers.get("x-forwarded-for") ?? "anon"
+  const { success, reset } = await summarizeLimiter.limit(identifier)
+  if (!success) return rateLimitResponse(reset)
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { id } = await params
   const supabase = createAdminSupabaseClient()
