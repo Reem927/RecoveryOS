@@ -3,10 +3,9 @@ import { Resend } from "resend"
 import Anthropic from "@anthropic-ai/sdk"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { clientId, assessmentId, overrideEmail } = await req.json()
   if (!clientId) return NextResponse.json({ error: "clientId required" }, { status: 400 })
 

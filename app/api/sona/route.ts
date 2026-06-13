@@ -1,8 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { NextRequest, NextResponse } from "next/server"
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 const PATIENT_CONTEXT = `
 You are SoNa, a warm, supportive AI recovery companion built into the RecoveryOS patient portal.
 You speak like a knowledgeable friend — never clinical, never condescending.
@@ -32,6 +30,7 @@ Never recommend changing protocols — that's Dr. Ruiz's job.
 `
 
 export async function POST(req: NextRequest) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   try {
     const { messages } = await req.json() as { messages: { role: "user" | "assistant"; content: string }[] }
 

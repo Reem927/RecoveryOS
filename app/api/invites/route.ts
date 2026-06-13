@@ -3,8 +3,6 @@ import { Resend } from "resend"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
 import { getCurrentPractitioner } from "@/lib/auth/current-practitioner"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 function generateToken(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   let token = ""
@@ -13,6 +11,7 @@ function generateToken(): string {
 }
 
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY)
   const practitioner = await getCurrentPractitioner()
   if (!practitioner?.clinic_id) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 })
