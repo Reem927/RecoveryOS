@@ -2,19 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { id } = await params
   const supabase = createAdminSupabaseClient()
 
   // Fetch assessment with patient info
   const { data: assessment, error: aErr } = await supabase
     .from("assessments")
-    .select(`*, patient:patients(id, full_name, date_of_birth)`)
+    .select(`*, patient:patients(id, full_name, dob, age, gender)`)
     .eq("id", id)
     .single()
 
@@ -56,17 +55,19 @@ Return this exact JSON structure:
 }`
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 1000,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   })
 
   const rawText = message.content[0].type === "text" ? message.content[0].text : ""
+  const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim()
   let summary: Record<string, unknown>
   try {
-    summary = JSON.parse(rawText)
+    summary = JSON.parse(cleaned)
   } catch {
+    console.error("[summarize] raw AI response:", rawText)
     return NextResponse.json({ error: "Failed to parse AI response", raw: rawText }, { status: 500 })
   }
 

@@ -7,10 +7,12 @@ __v0_jsx-dev-runtime.ts
 .vercel/
 next.user-config.*
 
-# Environment variables
+# Environment variables — never commit real keys
 .env*.local
 .env
 .env.local
+
+# Supabase — migrations and local config stay off the public repo
 /supabase
 
 # Common ignores
@@ -18,5 +20,18 @@ node_modules
 .next/
 .DS_Store
 .worktrees/
-# clerk configuration (can include secrets)
+
+# Clerk configuration (can include secrets)
 /.clerk/
+
+# Claude Code local settings (permissions, personal config)
+.claude/
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Local backup files
+*.local-bak
+
+# Root-level SVG duplicates (served from /public instead)
+/sona_final_line.svg

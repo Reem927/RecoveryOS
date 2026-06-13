@@ -16,6 +16,7 @@ import {
 import { computeFrameConfidence, getFrameQualityMessage, AngleSmoother } from "@/lib/vision-fusion"
 import { validateExerciseFrame, ThresholdRepCounter, fullBodyVisible, SquatRepCounter, LateralLungeCounter } from "@/lib/exercise-validators"
 import dynamic from "next/dynamic"
+import { sonaSpeak } from "@/lib/sonaVoice"
 
 const HumanModel3D = dynamic(
   () => import("@/components/hydrawav3/HumanModel3D"),
@@ -368,6 +369,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
   const isRunningRef = useRef(false)
   const isFinishingRef = useRef(false)
   const activeExerciseRef = useRef<ExerciseId | null>(null)
+  const isSpeakingRef = useRef(false)
+  const lastVoiceFeedbackRef = useRef(0)
+  const lastSpokenHintRef = useRef("")
 
   const [session, setSession]             = useState<AssessmentSession>(createSession())
   const [isRunning, setIsRunning]         = useState(false)
@@ -565,6 +569,22 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
         validation.repSignal,
         validation.ready && validation.validFrame
       )
+    }
+
+    // Throttled ElevenLabs voice feedback for CV-detected form hints
+    const now = Date.now()
+    const hint = validation.formHint
+    if (
+      isRunningRef.current &&
+      !isSpeakingRef.current &&
+      hint &&
+      hint !== lastSpokenHintRef.current &&
+      now - lastVoiceFeedbackRef.current > 7000
+    ) {
+      lastVoiceFeedbackRef.current = now
+      lastSpokenHintRef.current = hint
+      isSpeakingRef.current = true
+      sonaSpeak(hint).catch(() => {}).finally(() => { isSpeakingRef.current = false })
     }
 
     smoother.current.push(validation.patterns)
@@ -787,6 +807,8 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     resetTrackers()
 
     if (newSession.isComplete) {
+      sonaSpeak("Assessment complete.").catch(() => {})
+
       // Stop recording and get video blob
       const videoBlob = await stopVideoRecording()
 
@@ -807,6 +829,7 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
         onComplete?.(newSession.muscleScores, newSession, videoBlob)
       }
     } else {
+      sonaSpeak(EXERCISES[newSession.currentExercise].name).catch(() => {})
       setShowGuide(true)
     }
 
@@ -827,6 +850,9 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     Object.values(repCountersRef.current).forEach(counter => counter.reset())
     validHoldSecondsRef.current = 0
     lastHoldTickRef.current = null
+    isSpeakingRef.current = false
+    lastVoiceFeedbackRef.current = 0
+    lastSpokenHintRef.current = ""
   }, [])
 
   const startVideoRecording = useCallback(() => {
@@ -873,6 +899,10 @@ export default function LegAssessmentScan({ mode = "practitioner", onComplete }:
     setShowGuide(false)
     setIsRunning(true)
     setExerciseTimer(exercise.duration)
+
+    if (sessionRef.current.completedExercises.length === 0) {
+      sonaSpeak("Movement assessment starting.").catch(() => {})
+    }
 
     startVideoRecording()
 

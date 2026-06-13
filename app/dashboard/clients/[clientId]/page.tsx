@@ -2,22 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { Check, ChevronDown, ChevronUp, ClipboardList, Mail, Plus } from "lucide-react"
-import { AppShell } from "@/components/hydrawav3/app-shell"
-import { RecoveryAssistantChat, type AssessmentSummary } from "@/components/recovery-assistant-chat"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Textarea } from "@/components/ui/textarea"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Check, ChevronDown, ChevronUp, ClipboardList,
+  Mail, Plus, Zap, Sun, Moon, Send,
+} from "lucide-react"
+import { AppShell } from "@/components/hydrawav3/app-shell"
+import type { AssessmentSummary } from "@/components/recovery-assistant-chat"
 
 const BODY_AREAS = [
   "shoulder", "hip", "lower back", "knee", "neck", "calf",
@@ -71,11 +61,17 @@ export default function ClientDashboardPage() {
   const [sendingFollowUp, setSendingFollowUp] = useState(false)
   const [followUpSent, setFollowUpSent] = useState(false)
   const [followUpMessage, setFollowUpMessage] = useState<string | null>(null)
+  const [followUpEmail, setFollowUpEmail] = useState("")
   const [formOpen, setFormOpen] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [assessmentId, setAssessmentId] = useState<string | undefined>()
   const [assessmentSummary, setAssessmentSummary] = useState<AssessmentSummary | undefined>()
+  const [summaryError, setSummaryError] = useState<string | null>(null)
   const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [sendingInvite, setSendingInvite] = useState(false)
+  const [inviteSent, setInviteSent] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
 
   const [form, setForm] = useState<AssessmentForm>({
     primaryArea: "",
@@ -93,14 +89,41 @@ export default function ClientDashboardPage() {
       const res = await fetch(`/api/clients/${clientId}`)
       if (!res.ok) return
       const data = await res.json()
-      setClientName(data.full_name ?? "Client")
+      setClientName(data.nickname ?? data.full_name ?? "Client")
       setClientEmail(data.email ?? null)
-      setLastSession(data.latest_assessment?.created_at
-        ? new Date(data.latest_assessment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-        : null)
+      if (data.email) setFollowUpEmail(data.email)
+      setLastSession(
+        data.latest_assessment?.created_at
+          ? new Date(data.latest_assessment.created_at).toLocaleDateString("en-US", {
+              month: "short", day: "numeric", year: "numeric",
+            })
+          : null
+      )
     }
     loadClient()
   }, [clientId])
+
+  async function sendInvite() {
+    if (!inviteEmail) return
+    setSendingInvite(true)
+    setInviteError(null)
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: clientId, email: inviteEmail }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? "Failed to send invite")
+      }
+      setInviteSent(true)
+    } catch (err: unknown) {
+      setInviteError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setSendingInvite(false)
+    }
+  }
 
   async function sendFollowUp() {
     setSendingFollowUp(true)
@@ -108,7 +131,7 @@ export default function ClientDashboardPage() {
       const res = await fetch("/api/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, assessmentId }),
+        body: JSON.stringify({ clientId, assessmentId, overrideEmail: followUpEmail || undefined }),
       })
       if (res.ok) {
         const { message } = await res.json()
@@ -132,7 +155,7 @@ export default function ClientDashboardPage() {
   async function submitAssessment() {
     if (!form.primaryArea) return
     setSubmitting(true)
-
+    setSummaryError(null)
     try {
       const wearableData: Record<string, number> = {}
       if (form.hrv) wearableData.hrv_rmssd = parseFloat(form.hrv)
@@ -154,19 +177,24 @@ export default function ClientDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-
-      if (!createRes.ok) throw new Error("Failed to create assessment")
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}))
+        throw new Error(err.error ?? "Failed to save assessment")
+      }
 
       const { id } = await createRes.json()
       setAssessmentId(id)
 
-      // Summarize
       const sumRes = await fetch(`/api/assessments/${id}/summarize`, { method: "POST" })
-      if (sumRes.ok) {
-        const summary = await sumRes.json()
-        setAssessmentSummary(summary)
-        setFormOpen(false)
+      if (!sumRes.ok) {
+        const err = await sumRes.json().catch(() => ({}))
+        throw new Error(err.error ?? "Failed to generate summary")
       }
+      const summary = await sumRes.json()
+      setAssessmentSummary(summary)
+      setFormOpen(false)
+    } catch (err: unknown) {
+      setSummaryError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setSubmitting(false)
     }
@@ -174,32 +202,31 @@ export default function ClientDashboardPage() {
 
   return (
     <AppShell title={clientName} eyebrow="Recovery Intelligence">
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-4xl mx-auto space-y-5">
+
         {/* Top bar */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-white">{clientName}</h1>
-            <p className="text-sm text-zinc-400">
-              {lastSession ? `Last session: ${lastSession}` : "No sessions yet"}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          <p className="text-sm text-[#9CA3AF]">
+            {lastSession ? `Last session: ${lastSession}` : "No sessions yet"}
+          </p>
+          <button
             onClick={() => setFormOpen(true)}
+            className="inline-flex items-center gap-2 rounded-[10px] border border-black/[0.09] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="h-4 w-4" />
             New Assessment
-          </Button>
+          </button>
         </div>
 
         {/* Selected protocol banner */}
         {selectedProtocol && (
-          <div className="flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-4 py-3">
-            <Badge className="bg-cyan-600/30 text-cyan-300 border-cyan-500/40">Protocol Applied</Badge>
-            <span className="text-sm text-cyan-200">{selectedProtocol}</span>
+          <div className="flex items-center gap-3 bg-[#C97A56]/10 border border-[#C97A56]/20 rounded-[12px] px-4 py-3">
+            <span className="inline-flex items-center rounded-full bg-[#C97A56]/20 px-2.5 py-1 text-xs font-medium text-[#C97A56]">
+              Protocol Applied
+            </span>
+            <span className="text-sm text-[#374151]">{selectedProtocol}</span>
             <button
-              className="ml-auto text-xs text-zinc-500 hover:text-zinc-300"
+              className="ml-auto text-xs text-[#9CA3AF] hover:text-[#374151]"
               onClick={() => setSelectedProtocol(null)}
             >
               Clear
@@ -207,83 +234,88 @@ export default function ClientDashboardPage() {
           </div>
         )}
 
-        {/* Assessment form (collapsible) */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader
-            className="pb-3 cursor-pointer select-none"
+        {/* Pre-Session Assessment Card */}
+        <div className="rounded-[12px] border border-black/[0.07] bg-white overflow-hidden">
+          <button
+            type="button"
             onClick={() => setFormOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 border-b border-black/[0.06] hover:bg-[#FAFAFA] transition-colors"
           >
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-cyan-400" />
-                Pre-Session Assessment
-                {assessmentSummary && (
-                  <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs ml-2" variant="outline">
-                    Summary ready
-                  </Badge>
-                )}
-              </CardTitle>
-              {formOpen ? (
-                <ChevronUp className="w-4 h-4 text-zinc-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-zinc-500" />
+            <div className="flex items-center gap-2.5">
+              <ClipboardList className="h-4 w-4 text-[#C97A56]" />
+              <span className="text-sm font-semibold text-[#1F2937]">Pre-Session Assessment</span>
+              {assessmentSummary && (
+                <span className="inline-flex items-center rounded-full bg-[#27ae60]/10 px-2.5 py-1 text-xs font-medium text-[#27ae60]">
+                  Summary ready
+                </span>
               )}
             </div>
-          </CardHeader>
+            {formOpen
+              ? <ChevronUp className="h-4 w-4 text-[#9CA3AF]" />
+              : <ChevronDown className="h-4 w-4 text-[#9CA3AF]" />
+            }
+          </button>
 
           {formOpen && (
-            <CardContent className="pt-0 pb-6 space-y-5">
+            <div className="px-5 py-5 space-y-5">
+
               {/* Primary area */}
-              <div className="space-y-2">
-                <Label className="text-zinc-300 text-sm">Primary Focus Area</Label>
-                <Select value={form.primaryArea} onValueChange={(v) => setForm((p) => ({ ...p, primaryArea: v }))}>
-                  <SelectTrigger className="bg-zinc-800 border-zinc-700 text-zinc-200">
-                    <SelectValue placeholder="Select primary area" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-700">
-                    {BODY_AREAS.map((area) => (
-                      <SelectItem key={area} value={area} className="text-zinc-200 capitalize">
-                        {area}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1.5">Primary Focus Area</label>
+                <div className="flex flex-wrap gap-2">
+                  {BODY_AREAS.map((area) => (
+                    <button
+                      key={area}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, primaryArea: area }))}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium border capitalize transition-colors ${
+                        form.primaryArea === area
+                          ? "bg-[#C97A56]/15 border-[#C97A56]/40 text-[#C97A56]"
+                          : "bg-[#FAFAFA] border-black/[0.09] text-[#374151] hover:border-[#C97A56]/30"
+                      }`}
+                    >
+                      {area}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Discomfort slider */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <Label className="text-zinc-300 text-sm">Restriction Level</Label>
-                  <span className="text-xs text-cyan-300">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-[#374151]">Restriction Level</label>
+                  <span className="text-xs text-[#C97A56] font-medium">
                     {form.discomfortLevel} — {getDiscomfortLabel(form.discomfortLevel)}
                   </span>
                 </div>
-                <Slider
+                <input
+                  type="range"
                   min={0}
                   max={10}
                   step={1}
-                  value={[form.discomfortLevel]}
-                  onValueChange={([v]) => setForm((p) => ({ ...p, discomfortLevel: v }))}
-                  className="[&_[role=slider]]:bg-cyan-500"
+                  value={form.discomfortLevel}
+                  onChange={(e) => setForm((p) => ({ ...p, discomfortLevel: Number(e.target.value) }))}
+                  className="w-full accent-[#C97A56]"
                 />
-                <div className="flex justify-between text-xs text-zinc-600">
+                <div className="flex justify-between text-xs text-[#9CA3AF] mt-1">
                   <span>Feeling great</span>
                   <span>Very restricted</span>
                 </div>
               </div>
 
               {/* Wellness goals */}
-              <div className="space-y-2">
-                <Label className="text-zinc-300 text-sm">Wellness Goals</Label>
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1.5">Wellness Goals</label>
                 <div className="flex flex-wrap gap-2">
                   {WELLNESS_GOALS.map((goal) => (
                     <button
                       key={goal}
+                      type="button"
                       onClick={() => toggleGoal(goal)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize ${
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium border capitalize transition-colors ${
                         form.wellnessGoals.includes(goal)
-                          ? "bg-cyan-600/30 border-cyan-500/60 text-cyan-200"
-                          : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                          ? "bg-[#C97A56]/15 border-[#C97A56]/40 text-[#C97A56]"
+                          : "bg-[#FAFAFA] border-black/[0.09] text-[#374151] hover:border-[#C97A56]/30"
                       }`}
                     >
                       {goal}
@@ -293,27 +325,31 @@ export default function ClientDashboardPage() {
               </div>
 
               {/* Activity level */}
-              <div className="space-y-2">
-                <Label className="text-zinc-300 text-sm">Recent Activity Level</Label>
-                <Select value={form.activityLevel} onValueChange={(v) => setForm((p) => ({ ...p, activityLevel: v }))}>
-                  <SelectTrigger className="bg-zinc-800 border-zinc-700 text-zinc-200">
-                    <SelectValue placeholder="Select activity level" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-700">
-                    {ACTIVITY_LEVELS.map(({ value, label }) => (
-                      <SelectItem key={value} value={value} className="text-zinc-200">
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1.5">Recent Activity Level</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {ACTIVITY_LEVELS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, activityLevel: value }))}
+                      className={`rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors ${
+                        form.activityLevel === value
+                          ? "border-[#C97A56] bg-[#C97A56]/10 text-[#C97A56]"
+                          : "border-black/[0.09] bg-[#FAFAFA] text-[#374151] hover:border-[#C97A56]/40"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Wearable data */}
-              <div className="space-y-2">
-                <Label className="text-zinc-300 text-sm">
-                  Wearable Data <span className="text-zinc-500 font-normal">(optional)</span>
-                </Label>
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1.5">
+                  Wearable Data <span className="text-[#9CA3AF] font-normal">(optional)</span>
+                </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { key: "hrv", label: "HRV (ms)" },
@@ -321,14 +357,14 @@ export default function ClientDashboardPage() {
                     { key: "sleepScore", label: "Sleep Score" },
                   ].map(({ key, label }) => (
                     <div key={key}>
-                      <label className="text-xs text-zinc-500 block mb-1">{label}</label>
+                      <label className="block text-xs text-[#9CA3AF] mb-1">{label}</label>
                       <input
                         type="number"
                         min={0}
                         placeholder="—"
                         value={form[key as keyof AssessmentForm] as string}
                         onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        className="w-full rounded-[10px] border border-black/[0.09] bg-[#FAFAFA] px-3 py-2 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none focus:ring-2 focus:ring-[#C97A56]/30"
                       />
                     </div>
                   ))}
@@ -336,101 +372,188 @@ export default function ClientDashboardPage() {
               </div>
 
               {/* Practitioner notes */}
-              <div className="space-y-2">
-                <Label className="text-zinc-300 text-sm">Practitioner Notes</Label>
-                <Textarea
+              <div>
+                <label className="block text-xs font-medium text-[#374151] mb-1.5">Practitioner Notes</label>
+                <textarea
                   value={form.practitionerNotes}
                   onChange={(e) => setForm((p) => ({ ...p, practitionerNotes: e.target.value }))}
                   placeholder="Add any observations about this client's current state..."
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 resize-none"
                   rows={3}
+                  className="w-full rounded-[10px] border border-black/[0.09] bg-[#FAFAFA] px-3.5 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none focus:ring-2 focus:ring-[#C97A56]/30 resize-none"
                 />
               </div>
 
-              <Button
+              <button
                 onClick={submitAssessment}
                 disabled={!form.primaryArea || submitting}
-                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white"
+                className="w-full rounded-[10px] bg-[#C97A56] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#B86A48] transition-colors disabled:opacity-50"
               >
-                {submitting ? "Generating Summary..." : "Generate Assessment Summary"}
-              </Button>
-            </CardContent>
+                {submitting ? "Generating Summary…" : "Generate Assessment Summary"}
+              </button>
+
+              {summaryError && (
+                <p className="text-xs text-red-500 bg-red-50 rounded-[8px] px-3 py-2">{summaryError}</p>
+              )}
+            </div>
           )}
-        </Card>
+        </div>
+
+        {/* Compact AI Summary Box */}
+        {assessmentSummary && (
+          <div className="rounded-[12px] border border-[#C97A56]/20 bg-[#C97A56]/5 px-4 py-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-[#C97A56]" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-[#C97A56]">AI Summary</span>
+              {assessmentSummary.primary_focus_area && (
+                <span className="ml-auto text-xs font-medium text-[#C97A56] capitalize bg-[#C97A56]/10 px-2 py-0.5 rounded-full">
+                  {assessmentSummary.primary_focus_area}
+                </span>
+              )}
+            </div>
+            {assessmentSummary.practitioner_brief && (
+              <p className="text-sm text-[#374151] leading-relaxed">{assessmentSummary.practitioner_brief}</p>
+            )}
+            {assessmentSummary.protocol_recommendation && (
+              <div className="flex items-center gap-3 pt-1">
+                <div className="flex-1 flex items-center gap-2 text-xs text-[#9CA3AF]">
+                  <Sun className="h-3 w-3 text-[#f0a500] shrink-0" />
+                  <span>{assessmentSummary.protocol_recommendation.sun_placement}</span>
+                  <Moon className="h-3 w-3 text-[#8b5cf6] shrink-0 ml-2" />
+                  <span>{assessmentSummary.protocol_recommendation.moon_placement}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedProtocol(assessmentSummary.protocol_recommendation!.name)}
+                  className="shrink-0 rounded-[8px] bg-[#C97A56] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#B86A48] transition-colors"
+                >
+                  Apply Protocol
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Email Follow-up Card */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-3 pt-4">
-            <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-              <Mail className="w-4 h-4 text-blue-400" />
-              Email Follow-up
-              {clientEmail ? (
-                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs ml-2" variant="outline">
-                  {clientEmail}
-                </Badge>
-              ) : (
-                <Badge className="bg-zinc-700 text-zinc-400 border-zinc-600 text-xs ml-2" variant="outline">
-                  No email on file
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-5 space-y-4">
-            {!clientEmail ? (
-              <p className="text-xs text-zinc-400">
-                Add an email address to {clientName}&apos;s profile to enable follow-up emails.
-              </p>
-            ) : followUpSent && followUpMessage ? (
+        <div className="rounded-[12px] border border-black/[0.07] bg-white overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-black/[0.06]">
+            <Mail className="h-4 w-4 text-[#C97A56]" />
+            <span className="text-sm font-semibold text-[#1F2937]">Email Follow-up</span>
+            {clientEmail ? (
+              <span className="inline-flex items-center rounded-full bg-[#27ae60]/10 px-2.5 py-1 text-xs font-medium text-[#27ae60]">
+                {clientEmail}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium text-[#9CA3AF]">
+                No email on file
+              </span>
+            )}
+          </div>
+          <div className="px-5 py-4 space-y-4">
+            {/* Editable email input */}
+            <div>
+              <label className="block text-xs font-medium text-[#374151] mb-1.5">Send to</label>
+              <input
+                type="email"
+                value={followUpEmail}
+                onChange={(e) => setFollowUpEmail(e.target.value)}
+                placeholder="Enter client email address"
+                className="w-full rounded-[10px] border border-black/[0.09] bg-[#FAFAFA] px-3.5 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none focus:ring-2 focus:ring-[#C97A56]/30"
+              />
+            </div>
+
+            {followUpSent && followUpMessage ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs text-emerald-400">
-                  <Check className="w-3.5 h-3.5" />
-                  Email sent to {clientEmail}
+                <div className="flex items-center gap-2 text-xs text-[#27ae60]">
+                  <Check className="h-3.5 w-3.5" />
+                  Email sent to {followUpEmail}
                 </div>
-                <p className="text-xs text-zinc-400 bg-zinc-800 rounded-lg px-3 py-2 border border-zinc-700 italic leading-relaxed">
+                <p className="text-xs text-[#374151] bg-[#FAFAFA] rounded-[10px] px-3 py-2.5 border border-black/[0.06] italic leading-relaxed">
                   &ldquo;{followUpMessage}&rdquo;
                 </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs"
+                <button
                   onClick={() => { setFollowUpSent(false); setFollowUpMessage(null) }}
+                  className="rounded-[10px] border border-black/[0.09] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
                 >
                   Send another
-                </Button>
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-[#9CA3AF]">
                   {assessmentSummary
-                    ? `Claude will write a personalised recovery follow-up for ${clientName} based on today's assessment and send it to their email.`
+                    ? `Claude will write a personalised recovery follow-up for ${clientName} based on today's assessment.`
                     : `Claude will write a wellness check-in for ${clientName} and send it to their email.`}
                 </p>
-                <Button
-                  size="sm"
+                <button
                   onClick={sendFollowUp}
-                  disabled={sendingFollowUp}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
+                  disabled={sendingFollowUp || !followUpEmail}
+                  className="inline-flex items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B86A48] transition-colors disabled:opacity-50"
                 >
-                  <Mail className="w-3.5 h-3.5 mr-1.5" />
-                  {sendingFollowUp ? "Sending…" : assessmentSummary ? "Send Post-Session Follow-up" : "Send Wellness Check-in"}
-                </Button>
+                  <Mail className="h-3.5 w-3.5" />
+                  {sendingFollowUp
+                    ? "Sending…"
+                    : assessmentSummary
+                    ? "Send Post-Session Follow-up"
+                    : "Send Wellness Check-in"}
+                </button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Recovery Assistant Chat */}
-        <RecoveryAssistantChat
-          clientId={clientId}
-          clientName={clientName}
-          senderRole="practitioner"
-          assessmentId={assessmentId}
-          assessmentSummary={assessmentSummary}
-          onProtocolSelect={(protocol) => {
-            setSelectedProtocol(protocol)
-            console.log("[Hydrawav3] Protocol selected:", protocol)
-          }}
-        />
+        {/* Send Portal Invite Card */}
+        <div className="rounded-[12px] border border-black/[0.07] bg-white overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-black/[0.06]">
+            <Send className="h-4 w-4 text-[#C97A56]" />
+            <span className="text-sm font-semibold text-[#1F2937]">Client Portal Invite</span>
+          </div>
+          <div className="px-5 py-4 space-y-4">
+            {inviteSent ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs text-[#27ae60]">
+                  <Check className="h-3.5 w-3.5" />
+                  Invite sent to {inviteEmail}
+                </div>
+                <p className="text-xs text-[#9CA3AF]">
+                  {clientName} will receive an email with a link to create their client portal account.
+                </p>
+                <button
+                  onClick={() => { setInviteSent(false); setInviteError(null) }}
+                  className="rounded-[10px] border border-black/[0.09] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                >
+                  Send another invite
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-[#9CA3AF]">
+                  Send {clientName} an invite link so they can create their client portal account and track their recovery.
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-[#374151] mb-1.5">Email address</label>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="client@example.com"
+                    className="w-full rounded-[10px] border border-black/[0.09] bg-[#FAFAFA] px-3.5 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none focus:ring-2 focus:ring-[#C97A56]/30"
+                  />
+                </div>
+                {inviteError && (
+                  <p className="text-xs text-red-500 bg-red-50 rounded-[8px] px-3 py-2">{inviteError}</p>
+                )}
+                <button
+                  onClick={sendInvite}
+                  disabled={sendingInvite || !inviteEmail}
+                  className="inline-flex items-center gap-2 rounded-[10px] bg-[#C97A56] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B86A48] transition-colors disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {sendingInvite ? "Sending…" : "Send Invite"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </AppShell>
   )
