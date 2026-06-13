@@ -7,7 +7,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(req: NextRequest) {
-  const { clientId, assessmentId } = await req.json()
+  const { clientId, assessmentId, overrideEmail } = await req.json()
   if (!clientId) return NextResponse.json({ error: "clientId required" }, { status: 400 })
 
   const supabase = createAdminSupabaseClient()
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 })
-  if (!client.email) return NextResponse.json({ error: "Client has no email address on file" }, { status: 400 })
+  const toEmail: string = overrideEmail || client.email
+  if (!toEmail) return NextResponse.json({ error: "No email address provided" }, { status: 400 })
 
   // Fetch practitioner name + booking URL for this clinic
   const { data: practitioner } = await supabase
@@ -159,7 +160,7 @@ End with one simple check-in question about how they are feeling.`,
 
   const { data: emailData, error: sendError } = await resend.emails.send({
     from: fromAddress,
-    to: client.email,
+    to: toEmail,
     subject,
     html,
   })
@@ -185,7 +186,7 @@ End with one simple check-in question about how they are feeling.`,
     resend_email_id: (emailData as { id?: string } | null)?.id ?? null,
     subject,
     body: messageBody,
-    sent_to: client.email,
+    sent_to: toEmail,
   }).then(() => {}).catch(() => {})
 
   return NextResponse.json({ ok: true, message: messageBody })
