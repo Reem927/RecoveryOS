@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { auth } from "@clerk/nextjs/server"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
+import { telegramLimiter, rateLimitResponse } from "@/lib/rate-limit"
 
 async function sendTelegramMessage(chatId: number, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN
@@ -14,6 +16,11 @@ async function sendTelegramMessage(chatId: number, text: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const { userId } = await auth()
+  const identifier = userId ?? req.headers.get("x-forwarded-for") ?? "anon"
+  const { success, reset } = await telegramLimiter.limit(identifier)
+  if (!success) return rateLimitResponse(reset)
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { clientId, assessmentId } = await req.json()
   if (!clientId) return NextResponse.json({ error: "clientId required" }, { status: 400 })

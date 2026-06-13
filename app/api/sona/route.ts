@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
+import { chatLimiter, rateLimitResponse } from "@/lib/rate-limit"
 
 const PATIENT_CONTEXT = `
 You are SoNa, a warm, supportive AI recovery companion built into the RecoveryOS patient portal.
@@ -30,6 +32,11 @@ Never recommend changing protocols — that's Dr. Ruiz's job.
 `
 
 export async function POST(req: NextRequest) {
+  const { userId } = await auth()
+  const identifier = userId ?? req.headers.get("x-forwarded-for") ?? "anon"
+  const { success, reset } = await chatLimiter.limit(identifier)
+  if (!success) return rateLimitResponse(reset)
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   try {
     const { messages } = await req.json() as { messages: { role: "user" | "assistant"; content: string }[] }

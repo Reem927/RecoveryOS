@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 import Anthropic from "@anthropic-ai/sdk"
+import { auth } from "@clerk/nextjs/server"
 import { createAdminSupabaseClient } from "@/lib/supabase/admin"
+import { followupLimiter, rateLimitResponse } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
+  const { userId } = await auth()
+  const identifier = userId ?? req.headers.get("x-forwarded-for") ?? "anon"
+  const { success, reset } = await followupLimiter.limit(identifier)
+  if (!success) return rateLimitResponse(reset)
+
   const resend = new Resend(process.env.RESEND_API_KEY)
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const { clientId, assessmentId, overrideEmail } = await req.json()
